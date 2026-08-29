@@ -1,0 +1,256 @@
+command,source,registered,fe_call_sites,fe_first_site,http_method,endpoint,risk,risk_reason,browser_substitute
+add_query_history_entry,query_history.rs:179,yes,1,src/contexts/QueryHistoryProvider.tsx:68,POST,/api/history/add-query-history-entry,GREEN,pure request/response,Direct HTTP endpoint
+alter_view,commands.rs:4777,yes,1,src/components/modals/ViewEditorModal.tsx:155,POST,/api/db/alter-view,GREEN,pure request/response,Direct HTTP endpoint
+analyze_ai_explain_plan,ai.rs:507,yes,1,src/components/modals/visual-explain/ExplainAiAnalysis.tsx:39,GET,/api/ai/analyze-ai-explain-plan,GREEN,pure request/response,Direct HTTP endpoint
+apply_connection_import,connection_import_commands.rs:101,yes,1,src/components/modals/ImportFromAppModal.tsx:313,POST,/api/connections/apply-connection-import,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+apply_db_user_privileges,commands.rs:5228,yes,3,src/components/users/UserManagementView.tsx:324,POST,/api/db/apply-db-user-privileges,GREEN,pure request/response,Direct HTTP endpoint
+apply_tabularis_import,connection_import_commands.rs:137,yes,1,src/components/modals/ImportFromAppModal.tsx:308,POST,/api/connections/apply-tabularis-import,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+build_routine_call_sql,commands.rs:871,yes,1,src/components/modals/RunRoutineModal.tsx:91,GET,/api/db/build-routine-call-sql,GREEN,pure request/response,Direct HTTP endpoint
+cancel_dump,dump_commands.rs:39,yes,1,src/components/modals/DumpDatabaseModal.tsx:165,POST,/api/dump/cancel-dump,YELLOW,cancels in-flight local work,WS control msg + server job token
+cancel_export,export.rs:53,yes,1,src/pages/Editor.tsx:3328,POST,/api/export/cancel-export,YELLOW,cancels in-flight local work,WS control msg + server job token
+cancel_import,dump_commands.rs:421,yes,1,src/components/modals/ImportDatabaseModal.tsx:138,POST,/api/dump/cancel-import,YELLOW,cancels in-flight local work,WS control msg + server job token
+cancel_plugin_install,plugins/commands.rs:229,yes,1,src/components/settings/PluginsTab.tsx:771,POST,/api/plugins/cancel-plugin-install,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+cancel_query,commands.rs:4091,yes,1,src/pages/Editor.tsx:884,POST,/api/db/cancel-query,YELLOW,cancels in-flight local work,WS control msg + server job token
+check_ai_key,config.rs:749,yes,4,src/contexts/SettingsProvider.tsx:186,GET,/api/connections/check-ai-key,GREEN,pure request/response,Direct HTTP endpoint
+check_ai_key_status,config.rs:754,yes,5,src/components/settings/AiTab.tsx:123,GET,/api/connections/check-ai-key-status,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+check_for_updates,updater.rs:194,yes,1,src/contexts/UpdateProvider.tsx:37,GET,/api/updater/check-for-updates,RED,desktop self-updater,Drop — server-side deploy + in-app version banner
+clear_ai_activity,ai_commands.rs:41,yes,1,src/hooks/useAiActivity.ts:223,POST,/api/ai/clear-ai-activity,YELLOW,reads local log files,Server log API scoped to session
+clear_ai_models_cache,ai.rs:334,NO,0,,POST,/api/ai/clear-ai-models-cache,GREEN,pure request/response,Direct HTTP endpoint
+clear_logs,log_commands.rs:26,yes,1,src/components/settings/LogsTab.tsx:82,POST,/api/logs/clear-logs,YELLOW,reads local log files,Server log API scoped to session
+clear_query_history,query_history.rs:260,yes,1,src/contexts/QueryHistoryProvider.tsx:109,POST,/api/history/clear-query-history,GREEN,pure request/response,Direct HTTP endpoint
+close_devtools,lib.rs:128,yes,0,,POST,/api/app/close-devtools,RED,OS devtools,Drop — browser has native devtools
+close_results_window,results_window.rs:115,yes,2,src/pages/Editor.tsx:1627,POST,/api/results/close-results-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+complete_json_viewer_session,json_viewer.rs:199,yes,1,src/pages/JsonViewerPage.tsx:40,POST,/api/viewer/complete-json-viewer-session,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+consume_pending_deep_link_install,plugins/deep_link.rs:186,yes,1,src/hooks/useDeepLinkInstall.ts:66,POST,/api/plugins/consume-pending-deep-link-install,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+count_query,commands.rs:4393,yes,1,src/pages/Editor.tsx:1583,GET,/api/db/count-query,GREEN,pure request/response,Direct HTTP endpoint
+create_connection_group,commands.rs:5516,yes,1,src/contexts/DatabaseProvider.tsx:1188,POST,/api/db/create-connection-group,GREEN,pure request/response,Direct HTTP endpoint
+create_connection_tag,connection_tags.rs:184,yes,1,src/hooks/useConnectionTags.ts:28,POST,/api/connections/create-connection-tag,GREEN,pure request/response,Direct HTTP endpoint
+create_db_user,commands.rs:5167,yes,1,src/components/users/UserManagementView.tsx:315,POST,/api/db/create-db-user,GREEN,pure request/response,Direct HTTP endpoint
+create_group_path,commands.rs:5587,yes,1,src/contexts/DatabaseProvider.tsx:1200,POST,/api/db/create-group-path,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+create_notebook,notebooks.rs:197,yes,2,src/utils/notebookStore.ts:157,POST,/api/notebooks/create-notebook,GREEN,pure request/response,Direct HTTP endpoint
+create_sqlite_database,sqlite_database.rs:114,yes,1,src/hooks/useCreateSqliteDatabase.ts:30,POST,/api/db/create-sqlite-database,GREEN,pure request/response,Direct HTTP endpoint
+create_sqlite_file,sqlite_database.rs:104,yes,1,src/components/modals/NewConnectionModal.tsx:1541,POST,/api/db/create-sqlite-file,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+create_trigger,commands.rs:5057,yes,1,src/components/modals/TriggerEditorModal.tsx:181,POST,/api/db/create-trigger,GREEN,pure request/response,Direct HTTP endpoint
+create_view,commands.rs:4745,yes,1,src/components/modals/ViewEditorModal.tsx:135,POST,/api/db/create-view,GREEN,pure request/response,Direct HTTP endpoint
+decide_pending_approval,ai_commands.rs:131,yes,1,src/hooks/useAiActivity.ts:202,POST,/api/ai/decide-pending-approval,GREEN,pure request/response,Direct HTTP endpoint
+decrypt_export_payload,commands.rs:5992,yes,1,src/components/modals/ImportFromAppModal.tsx:258,POST,/api/db/decrypt-export-payload,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+delete_ai_key,config.rs:645,yes,1,src/components/settings/AiTab.tsx:347,POST,/api/connections/delete-ai-key,GREEN,pure request/response,Direct HTTP endpoint
+delete_connection,commands.rs:1061,yes,2,src/pages/Connections.tsx:410,POST,/api/db/delete-connection,GREEN,pure request/response,Direct HTTP endpoint
+delete_connection_group,commands.rs:5746,yes,1,src/contexts/DatabaseProvider.tsx:1238,POST,/api/db/delete-connection-group,GREEN,pure request/response,Direct HTTP endpoint
+delete_connection_icon,connection_appearance.rs:191,yes,2,src/components/modals/NewConnectionModal.tsx:589,POST,/api/connections/delete-connection-icon,GREEN,pure request/response,Direct HTTP endpoint
+delete_connection_tag,connection_tags.rs:210,yes,1,src/hooks/useConnectionTags.ts:48,POST,/api/connections/delete-connection-tag,GREEN,pure request/response,Direct HTTP endpoint
+delete_custom_theme,theme_commands.rs:68,yes,1,src/contexts/ThemeProvider.tsx:284,POST,/api/themes/delete-custom-theme,GREEN,pure request/response,Direct HTTP endpoint
+delete_editor_preferences,preferences.rs:76,yes,0,,POST,/api/prefs/delete-editor-preferences,GREEN,pure request/response,Direct HTTP endpoint
+delete_k8s_connection,commands.rs:2057,yes,1,src/utils/k8s.ts:87,POST,/api/db/delete-k8s-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+delete_notebook,notebooks.rs:223,yes,1,src/utils/notebookStore.ts:195,POST,/api/notebooks/delete-notebook,GREEN,pure request/response,Direct HTTP endpoint
+delete_query_history_entry,query_history.rs:239,yes,1,src/contexts/QueryHistoryProvider.tsx:95,POST,/api/history/delete-query-history-entry,GREEN,pure request/response,Direct HTTP endpoint
+delete_record,commands.rs:3762,yes,2,src/pages/Editor.tsx:2813,POST,/api/db/delete-record,GREEN,pure request/response,Direct HTTP endpoint
+delete_saved_query,saved_queries.rs:215,yes,1,src/contexts/SavedQueriesProvider.tsx:55,POST,/api/queries/delete-saved-query,GREEN,pure request/response,Direct HTTP endpoint
+delete_ssh_connection,commands.rs:1812,yes,1,src/utils/ssh.ts:88,POST,/api/db/delete-ssh-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+detect_blob_mime,commands.rs:3900,yes,0,,GET,/api/db/detect-blob-mime,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+detect_mime_type,commands.rs:3965,yes,0,,GET,/api/db/detect-mime-type,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+disable_plugin,plugins/commands.rs:253,yes,3,src/hooks/useTaskManager.ts:83,POST,/api/plugins/disable-plugin,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+disconnect_connection,commands.rs:5282,yes,1,src/contexts/DatabaseProvider.tsx:972,POST,/api/db/disconnect-connection,GREEN,pure request/response,Direct HTTP endpoint
+download_and_install_update,updater.rs:342,yes,1,src/contexts/UpdateProvider.tsx:79,POST,/api/updater/download-and-install-update,RED,desktop self-updater,Drop — server-side deploy + in-app version banner
+drop_db_user,commands.rs:5184,yes,1,src/components/users/UserManagementView.tsx:353,POST,/api/db/drop-db-user,GREEN,pure request/response,Direct HTTP endpoint
+drop_foreign_key_action,commands.rs:5440,yes,4,src/components/layout/ExplorerSidebar.tsx:1190,POST,/api/db/drop-foreign-key-action,GREEN,pure request/response,Direct HTTP endpoint
+drop_index_action,commands.rs:5423,yes,4,src/components/layout/ExplorerSidebar.tsx:1167,POST,/api/db/drop-index-action,GREEN,pure request/response,Direct HTTP endpoint
+drop_routine,commands.rs:927,yes,1,src/components/layout/ExplorerSidebar.tsx:464,POST,/api/db/drop-routine,GREEN,pure request/response,Direct HTTP endpoint
+drop_trigger,commands.rs:5084,yes,2,src/components/modals/TriggerEditorModal.tsx:166,POST,/api/db/drop-trigger,GREEN,pure request/response,Direct HTTP endpoint
+drop_view,commands.rs:4809,yes,1,src/components/layout/ExplorerSidebar.tsx:2146,POST,/api/db/drop-view,GREEN,pure request/response,Direct HTTP endpoint
+dump_database,dump_commands.rs:57,yes,1,src/components/modals/DumpDatabaseModal.tsx:140,POST,/api/dump/dump-database,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+duplicate_connection,commands.rs:1296,yes,1,src/pages/Connections.tsx:543,POST,/api/db/duplicate-connection,GREEN,pure request/response,Direct HTTP endpoint
+enable_plugin,plugins/commands.rs:261,yes,4,src/hooks/useTaskManager.ts:84,POST,/api/plugins/enable-plugin,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+encrypt_export_payload,commands.rs:5983,yes,1,src/pages/Connections.tsx:329,POST,/api/db/encrypt-export-payload,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+execute_clipboard_import,clipboard_import.rs:70,yes,1,src/components/modals/ClipboardImportModal.tsx:305,POST,/api/import/execute-clipboard-import,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+execute_query,commands.rs:4133,yes,14,src/hooks/usePluginApi.ts:32,POST,/api/db/execute-query,GREEN,pure request/response,Direct HTTP endpoint
+execute_query_batch,commands.rs:4226,yes,1,src/pages/Editor.tsx:1321,POST,/api/db/execute-query-batch,GREEN,pure request/response,Direct HTTP endpoint
+explain_ai_query,ai.rs:502,yes,1,src/components/modals/AiExplainModal.tsx:57,POST,/api/ai/explain-ai-query,GREEN,pure request/response,Direct HTTP endpoint
+explain_query_plan,commands.rs:4332,yes,2,src/components/modals/VisualExplainModal.tsx:82,POST,/api/db/explain-query-plan,GREEN,pure request/response,Direct HTTP endpoint
+export_ai_activity_csv,ai_commands.rs:65,yes,1,src/hooks/useAiActivity.ts:231,POST,/api/ai/export-ai-activity-csv,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_ai_activity_json,ai_commands.rs:48,yes,1,src/hooks/useAiActivity.ts:227,POST,/api/ai/export-ai-activity-json,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_ai_session_as_notebook,ai_commands.rs:114,yes,1,src/hooks/useAiActivity.ts:237,POST,/api/ai/export-ai-session-as-notebook,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_connections_payload,commands.rs:5867,yes,1,src/pages/Connections.tsx:320,POST,/api/db/export-connections-payload,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_logs,log_commands.rs:67,yes,1,src/components/settings/LogsTab.tsx:96,POST,/api/logs/export-logs,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_query_to_file,export.rs:68,yes,1,src/pages/Editor.tsx:3442,POST,/api/export/export-query-to-file,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+export_theme,theme_commands.rs:114,yes,0,,POST,/api/themes/export-theme,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+fetch_blob_as_data_url,commands.rs:3857,yes,1,src/components/ui/BlobInput.tsx:119,GET,/api/db/fetch-blob-as-data-url,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+fetch_plugin_readme,plugins/commands.rs:388,yes,1,src/components/modals/PluginReadmeModal.tsx:74,GET,/api/plugins/fetch-plugin-readme,YELLOW,plugin metadata (network/registry read),Direct endpoint; proxied through server
+fetch_plugin_registry,plugins/commands.rs:20,yes,2,src/hooks/usePluginRegistry.ts:18,GET,/api/plugins/fetch-plugin-registry,YELLOW,plugin metadata (network/registry read),Direct endpoint; proxied through server
+fetch_tabularium_plugin_preview,plugins/commands.rs:344,yes,1,src/components/modals/PluginInstallConfirmModal.tsx:69,GET,/api/plugins/fetch-tabularium-plugin-preview,YELLOW,plugin metadata (network/registry read),Direct endpoint; proxied through server
+generate_ai_query,ai.rs:497,yes,1,src/components/modals/AiQueryModal.tsx:116,POST,/api/ai/generate-ai-query,GREEN,pure request/response,Direct HTTP endpoint
+generate_cell_name,ai.rs:515,yes,2,src/components/notebook/NotebookOutline.tsx:37,POST,/api/ai/generate-cell-name,GREEN,pure request/response,Direct HTTP endpoint
+generate_tab_rename,ai.rs:773,yes,1,src/components/ui/MultiResultPanel.tsx:329,POST,/api/ai/generate-tab-rename,GREEN,pure request/response,Direct HTTP endpoint
+get_active_connections,commands.rs:5276,yes,1,src/contexts/DatabaseProvider.tsx:1145,GET,/api/db/get-active-connections,GREEN,pure request/response,Direct HTTP endpoint
+get_add_column_sql,commands.rs:5349,yes,2,src/components/modals/ModifyColumnModal.tsx:123,GET,/api/db/get-add-column-sql,GREEN,pure request/response,Direct HTTP endpoint
+get_ai_activity,ai_commands.rs:17,yes,1,src/hooks/useAiActivity.ts:43,GET,/api/ai/get-ai-activity,YELLOW,reads local log files,Server log API scoped to session
+get_ai_models,ai.rs:344,yes,0,,GET,/api/ai/get-ai-models,GREEN,pure request/response,Direct HTTP endpoint
+get_ai_schema_context,commands.rs:966,yes,1,src/components/modals/AiQueryModal.tsx:60,GET,/api/db/get-ai-schema-context,GREEN,pure request/response,Direct HTTP endpoint
+get_ai_session_events,ai_commands.rs:34,yes,1,src/hooks/useAiActivity.ts:120,GET,/api/ai/get-ai-session-events,GREEN,pure request/response,Direct HTTP endpoint
+get_ai_sessions,ai_commands.rs:27,yes,1,src/hooks/useAiActivity.ts:81,GET,/api/ai/get-ai-sessions,GREEN,pure request/response,Direct HTTP endpoint
+get_all_themes,theme_commands.rs:22,yes,1,src/contexts/ThemeProvider.tsx:100,GET,/api/themes/get-all-themes,GREEN,pure request/response,Direct HTTP endpoint
+get_alter_column_sql,commands.rs:5363,yes,2,src/components/modals/ModifyColumnModal.tsx:114,GET,/api/db/get-alter-column-sql,GREEN,pure request/response,Direct HTTP endpoint
+get_available_databases,commands.rs:742,yes,5,src/components/layout/ExplorerSidebar.tsx:1232,GET,/api/db/get-available-databases,GREEN,pure request/response,Direct HTTP endpoint
+get_cellname_prompt,config.rs:834,yes,1,src/components/settings/AiTab.tsx:162,GET,/api/connections/get-cellname-prompt,GREEN,pure request/response,Direct HTTP endpoint
+get_columns,commands.rs:3714,yes,12,src/components/ui/VisualQueryBuilder.tsx:202,GET,/api/db/get-columns,GREEN,pure request/response,Direct HTTP endpoint
+get_config,config.rs:268,yes,3,src/contexts/UpdateProvider.tsx:47,GET,/api/connections/get-config,GREEN,pure request/response,Direct HTTP endpoint
+get_config_json,config.rs:860,yes,1,src/components/modals/ConfigJsonModal.tsx:30,GET,/api/connections/get-config-json,GREEN,pure request/response,Direct HTTP endpoint
+get_connection_by_id,commands.rs:718,yes,1,src/utils/credentials.ts:39,GET,/api/db/get-connection-by-id,GREEN,pure request/response,Direct HTTP endpoint
+get_connection_groups,commands.rs:5496,yes,1,src/contexts/DatabaseProvider.tsx:1206,GET,/api/db/get-connection-groups,GREEN,pure request/response,Direct HTTP endpoint
+get_connections,commands.rs:1432,yes,4,src/hooks/useOpenConnectionInNewWindow.ts:28,GET,/api/db/get-connections,GREEN,pure request/response,Direct HTTP endpoint
+get_connections_backup_status,backup/mod.rs:457,yes,1,src/components/settings/BackupTab.tsx:59,GET,/api/backup/get-connections-backup-status,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+get_connections_with_groups,commands.rs:5504,yes,2,src/contexts/DatabaseProvider.tsx:1041,GET,/api/db/get-connections-with-groups,GREEN,pure request/response,Direct HTTP endpoint
+get_create_foreign_key_sql,commands.rs:5394,yes,2,src/components/modals/CreateForeignKeyModal.tsx:107,GET,/api/db/get-create-foreign-key-sql,GREEN,pure request/response,Direct HTTP endpoint
+get_create_index_sql,commands.rs:5378,yes,2,src/components/modals/CreateIndexModal.tsx:70,GET,/api/db/get-create-index-sql,GREEN,pure request/response,Direct HTTP endpoint
+get_create_table_sql,commands.rs:5335,yes,2,src/components/modals/CreateTableModal.tsx:72,GET,/api/db/get-create-table-sql,GREEN,pure request/response,Direct HTTP endpoint
+get_data_types,commands.rs:5312,yes,1,src/hooks/useDataTypes.ts:30,GET,/api/db/get-data-types,GREEN,pure request/response,Direct HTTP endpoint
+get_db_privilege_catalog,commands.rs:5137,yes,1,src/components/users/UserManagementView.tsx:214,GET,/api/db/get-db-privilege-catalog,YELLOW,reads local log files,Server log API scoped to session
+get_db_user_grants,commands.rs:5156,yes,1,src/components/users/UserManagementView.tsx:244,GET,/api/db/get-db-user-grants,GREEN,pure request/response,Direct HTTP endpoint
+get_db_user_privileges,commands.rs:5217,yes,1,src/components/users/UserManagementView.tsx:245,GET,/api/db/get-db-user-privileges,GREEN,pure request/response,Direct HTTP endpoint
+get_db_users,commands.rs:5147,yes,1,src/components/users/UserManagementView.tsx:224,GET,/api/db/get-db-users,GREEN,pure request/response,Direct HTTP endpoint
+get_driver_manifest,commands.rs:5485,yes,1,src/contexts/DatabaseProvider.tsx:686,GET,/api/db/get-driver-manifest,GREEN,pure request/response,Direct HTTP endpoint
+get_explain_prompt,config.rs:808,yes,1,src/components/settings/AiTab.tsx:159,GET,/api/connections/get-explain-prompt,GREEN,pure request/response,Direct HTTP endpoint
+get_explainplan_prompt,config.rs:821,yes,1,src/components/settings/AiTab.tsx:168,GET,/api/connections/get-explainplan-prompt,GREEN,pure request/response,Direct HTTP endpoint
+get_file_stats,commands.rs:3979,yes,0,,GET,/api/db/get-file-stats,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+get_foreign_keys,commands.rs:3730,yes,4,src/components/modals/GenerateSQLModal.tsx:76,GET,/api/db/get-foreign-keys,GREEN,pure request/response,Direct HTTP endpoint
+get_indexes,commands.rs:3746,yes,3,src/components/modals/GenerateSQLModal.tsx:81,GET,/api/db/get-indexes,GREEN,pure request/response,Direct HTTP endpoint
+get_installation_source,updater.rs:66,yes,1,src/contexts/UpdateProvider.tsx:102,GET,/api/updater/get-installation-source,RED,desktop self-updater,Drop — server-side deploy + in-app version banner
+get_installed_plugins,plugins/commands.rs:246,yes,1,src/hooks/useDrivers.ts:143,GET,/api/plugins/get-installed-plugins,YELLOW,plugin metadata (network/registry read),Direct endpoint; proxied through server
+get_json_viewer_session,json_viewer.rs:184,yes,1,src/pages/JsonViewerPage.tsx:26,GET,/api/viewer/get-json-viewer-session,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+get_k8s_connections,commands.rs:1968,yes,1,src/utils/k8s.ts:57,GET,/api/db/get-k8s-connections,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_k8s_contexts_cmd,commands.rs:2090,yes,2,src/utils/k8s.ts:113,GET,/api/db/get-k8s-contexts-cmd,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_k8s_namespaces_cmd,commands.rs:2100,yes,1,src/utils/k8s.ts:124,GET,/api/db/get-k8s-namespaces-cmd,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_k8s_resource_ports_cmd,commands.rs:2124,yes,1,src/utils/k8s.ts:157,GET,/api/db/get-k8s-resource-ports-cmd,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_k8s_resources_cmd,commands.rs:2111,yes,1,src/utils/k8s.ts:139,GET,/api/db/get-k8s-resources-cmd,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_keybindings,commands.rs:5462,yes,1,src/contexts/KeybindingsProvider.tsx:20,GET,/api/db/get-keybindings,GREEN,pure request/response,Direct HTTP endpoint
+get_last_active_connection,config.rs:547,yes,1,src/pages/Connections.tsx:154,GET,/api/connections/get-last-active-connection,GREEN,pure request/response,Direct HTTP endpoint
+get_last_open_connections,config.rs:573,yes,1,src/pages/Connections.tsx:153,GET,/api/connections/get-last-open-connections,GREEN,pure request/response,Direct HTTP endpoint
+get_log_settings,log_commands.rs:33,yes,1,src/components/settings/LogsTab.tsx:62,GET,/api/logs/get-log-settings,YELLOW,reads local log files,Server log API scoped to session
+get_logs,log_commands.rs:13,yes,1,src/components/settings/LogsTab.tsx:54,GET,/api/logs/get-logs,YELLOW,reads local log files,Server log API scoped to session
+get_materialized_view_columns,commands.rs:4901,yes,0,,GET,/api/db/get-materialized-view-columns,GREEN,pure request/response,Direct HTTP endpoint
+get_materialized_view_definition,commands.rs:4940,yes,1,src/components/layout/ExplorerSidebar.tsx:2212,GET,/api/db/get-materialized-view-definition,GREEN,pure request/response,Direct HTTP endpoint
+get_materialized_views,commands.rs:4869,yes,3,src/contexts/DatabaseProvider.tsx:363,GET,/api/db/get-materialized-views,GREEN,pure request/response,Direct HTTP endpoint
+get_mcp_status,mcp/install.rs:177,yes,2,src/components/modals/McpModal.tsx:95,GET,/api/mcp/get-mcp-status,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+get_pending_explain_file,explain_import.rs:57,yes,1,src/pages/VisualExplainPage.tsx:111,GET,/api/explain/get-pending-explain-file,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+get_plugin_dir,plugins/commands.rs:307,yes,0,,GET,/api/plugins/get-plugin-dir,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+get_plugin_manifest,plugins/commands.rs:279,yes,2,src/components/settings/PluginSettingsPage.tsx:37,GET,/api/plugins/get-plugin-manifest,YELLOW,plugin metadata (network/registry read),Direct endpoint; proxied through server
+get_plugin_startup_errors,plugins/manager.rs:25,yes,0,,GET,/api/plugins/get-plugin-startup-errors,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+get_process_list,task_manager.rs:299,yes,1,src/hooks/useTaskManager.ts:32,GET,/api/tasks/get-process-list,RED,host OS process/system introspection,"Server-side metrics scoped to session, or drop"
+get_query_history,query_history.rs:164,yes,1,src/contexts/QueryHistoryProvider.tsx:33,GET,/api/history/get-query-history,GREEN,pure request/response,Direct HTTP endpoint
+get_registered_drivers,commands.rs:5457,yes,2,src/hooks/useDrivers.ts:142,GET,/api/db/get-registered-drivers,GREEN,pure request/response,Direct HTTP endpoint
+get_routine_create_template,commands.rs:896,yes,1,src/components/layout/ExplorerSidebar.tsx:443,GET,/api/db/get-routine-create-template,GREEN,pure request/response,Direct HTTP endpoint
+get_routine_definition,commands.rs:846,yes,1,src/utils/databaseObjectActions.ts:268,GET,/api/db/get-routine-definition,GREEN,pure request/response,Direct HTTP endpoint
+get_routine_edit_script,commands.rs:909,yes,1,src/components/layout/ExplorerSidebar.tsx:2277,GET,/api/db/get-routine-edit-script,GREEN,pure request/response,Direct HTTP endpoint
+get_routine_parameters,commands.rs:823,yes,2,src/components/modals/RunRoutineModal.tsx:46,GET,/api/db/get-routine-parameters,GREEN,pure request/response,Direct HTTP endpoint
+get_routines,commands.rs:798,yes,2,src/contexts/DatabaseProvider.tsx:46,GET,/api/db/get-routines,GREEN,pure request/response,Direct HTTP endpoint
+get_saved_queries,saved_queries.rs:66,yes,1,src/contexts/SavedQueriesProvider.tsx:19,GET,/api/queries/get-saved-queries,GREEN,pure request/response,Direct HTTP endpoint
+get_schema_preference,config.rs:517,yes,1,src/contexts/DatabaseProvider.tsx:860,GET,/api/connections/get-schema-preference,GREEN,pure request/response,Direct HTTP endpoint
+get_schema_snapshot,commands.rs:952,yes,1,src/contexts/EditorProvider.tsx:395,GET,/api/db/get-schema-snapshot,GREEN,pure request/response,Direct HTTP endpoint
+get_schemas,commands.rs:726,yes,1,src/contexts/DatabaseProvider.tsx:845,GET,/api/db/get-schemas,GREEN,pure request/response,Direct HTTP endpoint
+get_selected_schemas,config.rs:601,yes,1,src/contexts/DatabaseProvider.tsx:850,GET,/api/connections/get-selected-schemas,GREEN,pure request/response,Direct HTTP endpoint
+get_server_now,commands.rs:5838,yes,1,src/components/ui/DataGrid.tsx:1569,GET,/api/db/get-server-now,GREEN,pure request/response,Direct HTTP endpoint
+get_ssh_connections,commands.rs:1600,yes,1,src/utils/ssh.ts:27,GET,/api/db/get-ssh-connections,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+get_system_prompt,config.rs:795,yes,1,src/components/settings/AiTab.tsx:156,GET,/api/connections/get-system-prompt,GREEN,pure request/response,Direct HTTP endpoint
+get_system_stats,task_manager.rs:318,yes,1,src/hooks/useTaskManager.ts:33,GET,/api/tasks/get-system-stats,RED,host OS process/system introspection,"Server-side metrics scoped to session, or drop"
+get_tables,commands.rs:3684,yes,10,src/components/modals/ClipboardImportModal.tsx:133,GET,/api/db/get-tables,GREEN,pure request/response,Direct HTTP endpoint
+get_tabrename_prompt,config.rs:847,yes,1,src/components/settings/AiTab.tsx:165,GET,/api/connections/get-tabrename-prompt,GREEN,pure request/response,Direct HTTP endpoint
+get_tabularis_children,task_manager.rs:325,yes,1,src/pages/TaskManagerPage.tsx:108,GET,/api/tasks/get-tabularis-children,RED,host OS process/system introspection,"Server-side metrics scoped to session, or drop"
+get_theme,theme_commands.rs:40,yes,0,,GET,/api/themes/get-theme,GREEN,pure request/response,Direct HTTP endpoint
+get_trigger_definition,commands.rs:5033,yes,2,src/utils/databaseObjectActions.ts:279,GET,/api/db/get-trigger-definition,GREEN,pure request/response,Direct HTTP endpoint
+get_triggers,commands.rs:5009,yes,8,src/contexts/DatabaseProvider.tsx:333,GET,/api/db/get-triggers,GREEN,pure request/response,Direct HTTP endpoint
+get_view_columns,commands.rs:4838,yes,0,,GET,/api/db/get-view-columns,GREEN,pure request/response,Direct HTTP endpoint
+get_view_definition,commands.rs:4714,yes,1,src/components/modals/ViewEditorModal.tsx:51,GET,/api/db/get-view-definition,GREEN,pure request/response,Direct HTTP endpoint
+get_views,commands.rs:4684,yes,8,src/contexts/DatabaseProvider.tsx:300,GET,/api/db/get-views,GREEN,pure request/response,Direct HTTP endpoint
+import_connections_payload,commands.rs:6001,yes,0,,POST,/api/db/import-connections-payload,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+import_database,dump_commands.rs:440,yes,1,src/components/modals/ImportDatabaseModal.tsx:61,POST,/api/dump/import-database,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+import_theme,theme_commands.rs:89,yes,0,,POST,/api/themes/import-theme,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+insert_record,commands.rs:4045,yes,2,src/components/modals/NewRowModal.tsx:212,POST,/api/db/insert-record,GREEN,pure request/response,Direct HTTP endpoint
+install_mcp_config,mcp/install.rs:217,yes,2,src/components/modals/McpModal.tsx:115,POST,/api/mcp/install-mcp-config,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+install_plugin,plugins/commands.rs:153,yes,3,src/hooks/useDeepLinkInstall.ts:92,POST,/api/plugins/install-plugin,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+is_debug_mode,lib.rs:117,yes,1,src/App.tsx:94,GET,/api/app/is-debug-mode,GREEN,pure request/response,Direct HTTP endpoint
+kill_plugin_process,task_manager.rs:332,yes,1,src/hooks/useTaskManager.ts:64,POST,/api/tasks/kill-plugin-process,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+list_all_preferences,preferences.rs:87,yes,0,,GET,/api/prefs/list-all-preferences,GREEN,pure request/response,Direct HTTP endpoint
+list_connection_import_sources,connection_import_commands.rs:44,yes,1,src/components/modals/ImportFromAppModal.tsx:125,GET,/api/connections/list-connection-import-sources,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+list_connection_tags,connection_tags.rs:176,yes,1,src/hooks/useConnectionTags.ts:14,GET,/api/connections/list-connection-tags,GREEN,pure request/response,Direct HTTP endpoint
+list_databases,commands.rs:3626,yes,1,src/components/modals/NewConnectionModal.tsx:1591,GET,/api/db/list-databases,GREEN,pure request/response,Direct HTTP endpoint
+list_notebooks,notebooks.rs:241,yes,1,src/utils/notebookStore.ts:203,GET,/api/notebooks/list-notebooks,GREEN,pure request/response,Direct HTTP endpoint
+list_pending_approvals,ai_commands.rs:124,yes,1,src/hooks/useAiActivity.ts:175,GET,/api/ai/list-pending-approvals,GREEN,pure request/response,Direct HTTP endpoint
+load_blob_from_file,commands.rs:3913,yes,1,src/components/ui/BlobInput.tsx:155,GET,/api/db/load-blob-from-file,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+load_editor_preferences,preferences.rs:57,yes,1,src/utils/editor.ts:33,GET,/api/prefs/load-editor-preferences,GREEN,pure request/response,Direct HTTP endpoint
+load_explain_from_file,explain_import.rs:48,yes,1,src/pages/VisualExplainPage.tsx:56,GET,/api/explain/load-explain-from-file,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+load_notebook,notebooks.rs:215,yes,1,src/utils/notebookStore.ts:125,GET,/api/notebooks/load-notebook,GREEN,pure request/response,Direct HTTP endpoint
+log_frontend_event,log_commands.rs:106,yes,2,src/contexts/DatabaseProvider.tsx:260,POST,/api/logs/log-frontend-event,YELLOW,reads local log files,Server log API scoped to session
+map_inferred_column_types,commands.rs:5324,yes,1,src/components/modals/ClipboardImportModal.tsx:90,POST,/api/db/map-inferred-column-types,GREEN,pure request/response,Direct HTTP endpoint
+move_connection_to_group,commands.rs:5775,yes,1,src/contexts/DatabaseProvider.tsx:1248,POST,/api/db/move-connection-to-group,GREEN,pure request/response,Direct HTTP endpoint
+move_group_to_parent,commands.rs:5670,yes,1,src/contexts/DatabaseProvider.tsx:1225,POST,/api/db/move-group-to-parent,GREEN,pure request/response,Direct HTTP endpoint
+open_connection_window,connection_window.rs:20,yes,1,src/hooks/useOpenConnectionInNewWindow.ts:36,POST,/api/windows/open-connection-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+open_devtools,lib.rs:122,yes,0,,POST,/api/app/open-devtools,RED,OS devtools,Drop — browser has native devtools
+open_er_diagram_window,commands.rs:4477,yes,5,src/components/layout/ExplorerSidebar.tsx:627,POST,/api/db/open-er-diagram-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+open_json_viewer_window,json_viewer.rs:40,yes,2,src/components/ui/JsonInput.tsx:159,POST,/api/viewer/open-json-viewer-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+open_plugins_dir,plugins/commands.rs:323,yes,1,src/components/settings/PluginsTab.tsx:709,POST,/api/plugins/open-plugins-dir,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+open_results_window,results_window.rs:35,yes,1,src/pages/Editor.tsx:1615,POST,/api/results/open-results-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+open_task_manager_window,task_manager.rs:366,yes,1,src/components/settings/InfoTab.tsx:298,POST,/api/tasks/open-task-manager-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+open_visual_explain_window,explain_import.rs:102,yes,0,,POST,/api/explain/open-visual-explain-window,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+preview_connection_import,connection_import_commands.rs:69,yes,1,src/components/modals/ImportFromAppModal.tsx:240,GET,/api/connections/preview-connection-import,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+preview_tabularis_import,connection_import_commands.rs:125,yes,1,src/components/modals/ImportFromAppModal.tsx:182,GET,/api/connections/preview-tabularis-import,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+read_file_as_data_url,commands.rs:4010,yes,1,src/components/ui/BlobInput.tsx:98,GET,/api/db/read-file-as-data-url,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+read_plugin_file,plugins/commands.rs:405,yes,2,src/contexts/PluginSlotProvider.tsx:50,GET,/api/plugins/read-plugin-file,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+refresh_materialized_view,commands.rs:4978,yes,1,src/components/layout/ExplorerSidebar.tsx:2193,POST,/api/db/refresh-materialized-view,GREEN,pure request/response,Direct HTTP endpoint
+register_active_connection,commands.rs:5267,yes,1,src/contexts/DatabaseProvider.tsx:724,POST,/api/db/register-active-connection,GREEN,pure request/response,Direct HTTP endpoint
+relaunch_app,config.rs:872,yes,1,src/components/modals/ConfigJsonModal.tsx:55,POST,/api/connections/relaunch-app,GREEN,pure request/response,Direct HTTP endpoint
+rename_notebook,notebooks.rs:230,yes,1,src/utils/notebookStore.ts:221,POST,/api/notebooks/rename-notebook,GREEN,pure request/response,Direct HTTP endpoint
+reorder_connections_in_group,commands.rs:5820,yes,1,src/contexts/DatabaseProvider.tsx:1270,POST,/api/db/reorder-connections-in-group,GREEN,pure request/response,Direct HTTP endpoint
+reorder_groups,commands.rs:5802,yes,1,src/contexts/DatabaseProvider.tsx:1257,POST,/api/db/reorder-groups,GREEN,pure request/response,Direct HTTP endpoint
+reset_cellname_prompt,config.rs:842,yes,0,,POST,/api/connections/reset-cellname-prompt,GREEN,pure request/response,Direct HTTP endpoint
+reset_explain_prompt,config.rs:816,yes,0,,POST,/api/connections/reset-explain-prompt,GREEN,pure request/response,Direct HTTP endpoint
+reset_explainplan_prompt,config.rs:829,yes,0,,POST,/api/connections/reset-explainplan-prompt,GREEN,pure request/response,Direct HTTP endpoint
+reset_system_prompt,config.rs:803,yes,0,,POST,/api/connections/reset-system-prompt,GREEN,pure request/response,Direct HTTP endpoint
+reset_tabrename_prompt,config.rs:855,yes,0,,POST,/api/connections/reset-tabrename-prompt,GREEN,pure request/response,Direct HTTP endpoint
+respond_ssh_askpass,askpass/mod.rs:133,yes,1,src/hooks/useSshAskpass.ts:43,POST,/api/ssh/respond-ssh-askpass,RED,local ssh/k8s tunnel + interactive askpass,Server-side tunnel pool; askpass via WS prompt round-trip
+restart_plugin_process,task_manager.rs:338,yes,0,,POST,/api/tasks/restart-plugin-process,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+run_connections_backup,backup/mod.rs:501,yes,1,src/components/settings/BackupTab.tsx:116,POST,/api/backup/run-connections-backup,YELLOW,local-disk file i/o + progress events,HTTP streaming download / multipart upload; WS progress
+save_blob_to_file,commands.rs:3829,yes,1,src/components/ui/BlobInput.tsx:187,POST,/api/db/save-blob-to-file,YELLOW,local filesystem access,Sandboxed server workspace; no arbitrary FS
+save_cellname_prompt,config.rs:838,yes,0,,POST,/api/connections/save-cellname-prompt,GREEN,pure request/response,Direct HTTP endpoint
+save_config,config.rs:273,yes,8,src/contexts/SettingsProvider.tsx:151,POST,/api/connections/save-config,GREEN,pure request/response,Direct HTTP endpoint
+save_config_json,config.rs:877,yes,1,src/components/modals/ConfigJsonModal.tsx:45,POST,/api/connections/save-config-json,GREEN,pure request/response,Direct HTTP endpoint
+save_connection,commands.rs:992,yes,1,src/components/modals/NewConnectionModal.tsx:2209,POST,/api/db/save-connection,GREEN,pure request/response,Direct HTTP endpoint
+save_connection_icon,connection_appearance.rs:179,yes,1,src/components/modals/NewConnectionModal/AppearanceSection.tsx:103,POST,/api/connections/save-connection-icon,GREEN,pure request/response,Direct HTTP endpoint
+save_custom_theme,theme_commands.rs:54,yes,4,src/contexts/ThemeProvider.tsx:239,POST,/api/themes/save-custom-theme,GREEN,pure request/response,Direct HTTP endpoint
+save_editor_preferences,preferences.rs:41,yes,1,src/utils/editor.ts:68,POST,/api/prefs/save-editor-preferences,GREEN,pure request/response,Direct HTTP endpoint
+save_explain_prompt,config.rs:812,yes,0,,POST,/api/connections/save-explain-prompt,GREEN,pure request/response,Direct HTTP endpoint
+save_explainplan_prompt,config.rs:825,yes,0,,POST,/api/connections/save-explainplan-prompt,GREEN,pure request/response,Direct HTTP endpoint
+save_k8s_connection,commands.rs:1982,yes,1,src/utils/k8s.ts:70,POST,/api/db/save-k8s-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+save_keybindings,commands.rs:5473,yes,2,src/contexts/KeybindingsProvider.tsx:50,POST,/api/db/save-keybindings,GREEN,pure request/response,Direct HTTP endpoint
+save_notebook,notebooks.rs:206,yes,1,src/utils/notebookStore.ts:55,POST,/api/notebooks/save-notebook,GREEN,pure request/response,Direct HTTP endpoint
+save_query,saved_queries.rs:100,yes,1,src/contexts/SavedQueriesProvider.tsx:35,POST,/api/queries/save-query,GREEN,pure request/response,Direct HTTP endpoint
+save_ssh_connection,commands.rs:1684,yes,1,src/utils/ssh.ts:63,POST,/api/db/save-ssh-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+save_system_prompt,config.rs:799,yes,0,,POST,/api/connections/save-system-prompt,GREEN,pure request/response,Direct HTTP endpoint
+save_tabrename_prompt,config.rs:851,yes,0,,POST,/api/connections/save-tabrename-prompt,GREEN,pure request/response,Direct HTTP endpoint
+set_ai_key,config.rs:636,yes,1,src/components/settings/AiTab.tsx:176,POST,/api/connections/set-ai-key,GREEN,pure request/response,Direct HTTP endpoint
+set_connection_appearance,commands.rs:1283,yes,2,src/components/modals/NewConnectionModal.tsx:2204,POST,/api/db/set-connection-appearance,GREEN,pure request/response,Direct HTTP endpoint
+set_connection_tags,connection_tags.rs:221,yes,1,src/components/modals/NewConnectionModal.tsx:2224,POST,/api/connections/set-connection-tags,GREEN,pure request/response,Direct HTTP endpoint
+set_connections_backup_password,backup/mod.rs:477,yes,1,src/components/settings/BackupTab.tsx:82,POST,/api/backup/set-connections-backup-password,RED,OS keychain secret write,Server-side encrypted secret store keyed to session
+set_connections_backup_target_password,backup/mod.rs:488,yes,1,src/components/settings/BackupTab.tsx:98,POST,/api/backup/set-connections-backup-target-password,RED,OS keychain secret write,Server-side encrypted secret store keyed to session
+set_db_user_password,commands.rs:5200,yes,1,src/components/users/UserManagementView.tsx:368,POST,/api/db/set-db-user-password,RED,OS keychain secret write,Server-side encrypted secret store keyed to session
+set_last_active_connection,config.rs:552,yes,2,src/contexts/DatabaseProvider.tsx:999,POST,/api/connections/set-last-active-connection,GREEN,pure request/response,Direct HTTP endpoint
+set_last_open_connections,config.rs:580,yes,2,src/contexts/DatabaseProvider.tsx:991,POST,/api/connections/set-last-open-connections,GREEN,pure request/response,Direct HTTP endpoint
+set_log_enabled,log_commands.rs:43,yes,1,src/components/settings/LogsTab.tsx:109,POST,/api/logs/set-log-enabled,YELLOW,reads local log files,Server log API scoped to session
+set_log_max_size,log_commands.rs:50,yes,1,src/components/settings/LogsTab.tsx:122,POST,/api/logs/set-log-max-size,YELLOW,reads local log files,Server log API scoped to session
+set_schema_preference,config.rs:525,yes,2,src/contexts/DatabaseProvider.tsx:611,POST,/api/connections/set-schema-preference,GREEN,pure request/response,Direct HTTP endpoint
+set_selected_databases,commands.rs:761,yes,3,src/contexts/DatabaseProvider.tsx:252,POST,/api/db/set-selected-databases,GREEN,pure request/response,Direct HTTP endpoint
+set_selected_schemas,config.rs:610,yes,1,src/contexts/DatabaseProvider.tsx:592,POST,/api/connections/set-selected-schemas,GREEN,pure request/response,Direct HTTP endpoint
+set_window_title,commands.rs:4437,yes,2,src/contexts/DatabaseProvider.tsx:149,POST,/api/db/set-window-title,RED,multi-window (OS webview),In-app panel/route or browser popup; BroadcastChannel for cross-tab sync
+suggest_table_name,ai.rs:718,yes,1,src/components/modals/ClipboardImportModal.tsx:237,POST,/api/ai/suggest-table-name,GREEN,pure request/response,Direct HTTP endpoint
+test_connection,commands.rs:2300,yes,3,src/hooks/useOpenConnectionInNewWindow.ts:31,GET,/api/db/test-connection,GREEN,pure request/response,Direct HTTP endpoint
+test_k8s_connection_cmd,commands.rs:2078,yes,1,src/utils/k8s.ts:98,GET,/api/db/test-k8s-connection-cmd,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+test_log,log_commands.rs:117,yes,0,,GET,/api/logs/test-log,YELLOW,reads local log files,Server log API scoped to session
+test_ssh_connection,commands.rs:1840,yes,1,src/utils/ssh.ts:103,GET,/api/db/test-ssh-connection,RED,local ssh/k8s tunnel + interactive askpass,Server-side tunnel pool; askpass via WS prompt round-trip
+uninstall_plugin,plugins/commands.rs:234,yes,1,src/components/settings/PluginsTab.tsx:797,POST,/api/plugins/uninstall-plugin,RED,installs/controls local child process (stdio JSON-RPC),"Server-side plugin host, admin-gated; per-user sandbox"
+update_connection,commands.rs:1123,yes,1,src/components/modals/NewConnectionModal.tsx:2196,POST,/api/db/update-connection,GREEN,pure request/response,Direct HTTP endpoint
+update_connection_group,commands.rs:5636,yes,1,src/contexts/DatabaseProvider.tsx:1215,POST,/api/db/update-connection-group,GREEN,pure request/response,Direct HTTP endpoint
+update_connection_tag,connection_tags.rs:197,yes,1,src/hooks/useConnectionTags.ts:40,POST,/api/connections/update-connection-tag,GREEN,pure request/response,Direct HTTP endpoint
+update_k8s_connection,commands.rs:2017,yes,1,src/utils/k8s.ts:80,POST,/api/db/update-k8s-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+update_record,commands.rs:3789,yes,3,src/components/ui/DataGrid.tsx:1112,POST,/api/db/update-record,GREEN,pure request/response,Direct HTTP endpoint
+update_saved_query,saved_queries.rs:143,yes,1,src/contexts/SavedQueriesProvider.tsx:45,POST,/api/queries/update-saved-query,GREEN,pure request/response,Direct HTTP endpoint
+update_ssh_connection,commands.rs:1743,yes,1,src/utils/ssh.ts:77,POST,/api/db/update-ssh-connection,YELLOW,SSH/tunnel config CRUD incl. secrets,Normal endpoint; secrets move to server secret store
+validate_k8s_path_cmd,commands.rs:2144,yes,1,src/utils/k8s.ts:173,GET,/api/db/validate-k8s-path-cmd,RED,local ssh/k8s tunnel + interactive askpass,Server-side tunnel pool; askpass via WS prompt round-trip

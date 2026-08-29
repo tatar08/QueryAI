@@ -1,0 +1,9 @@
+tauri_module,apis_used,files_affected,risk,risk_reason,browser_substitute
+@tauri-apps/plugin-dialog,ask confirm message open save,25,YELLOW,save/open file picker + native modal,showSaveFilePicker/File System Access API w/ <a download> fallback; ask()/confirm() -> in-app modal (design owns)
+@tauri-apps/plugin-fs,readTextFile writeFile writeTextFile,10,YELLOW,direct local filesystem read/write,Blob download for write; <input type=file> for read. NO arbitrary path access in browser
+@tauri-apps/plugin-opener,openUrl,13,GREEN,opens external URL in OS browser (openUrl only — no local paths),"window.open(url, ""_blank"", ""noopener"") — 1:1 mapping"
+@tauri-apps/plugin-clipboard-manager,readText writeText,3,YELLOW,OS clipboard,navigator.clipboard (requires secure context + user gesture)
+@tauri-apps/plugin-notification,isPermissionGranted requestPermission sendNotification,1,YELLOW,OS notification,Notification API (requires permission prompt)
+@tauri-apps/api/window,UserAttentionType getCurrentWindow,5,RED,"OS webview control (label, title, close, focus)",No analogue; in-app routing + document.title
+@tauri-apps/api/path,appDataDir join,1,RED,OS path resolution (appDataDir etc.),No analogue; server-issued URLs
+@tauri-apps/api/event,emit listen type UnlistenFn,12,YELLOW,Rust->JS event bus,WebSocket / SSE channel
