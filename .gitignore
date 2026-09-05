@@ -40,3 +40,7 @@ AGENTS.override.md
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+
+# OctoOffice agent runtime (project context cache + task worktrees)
+.octooffice/
+.octooffice-worktrees/
