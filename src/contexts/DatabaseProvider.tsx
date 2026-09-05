@@ -1,18 +1,15 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   DatabaseContext,
-  type TableInfo,
   type ViewInfo,
   type RoutineInfo,
   type TriggerInfo,
   type SavedConnection,
   type ConnectionData,
   type ConnectionGroup,
-  type ConnectionsFile,
 } from './DatabaseContext';
 import type { ReactNode } from 'react';
 import type { PluginManifest } from '../types/plugins';
@@ -21,6 +18,8 @@ import { toErrorMessage } from '../utils/errors';
 import { useSettings } from '../hooks/useSettings';
 import { useToast } from '../hooks/useToast';
 import { findConnectionsForDrivers } from '../utils/connectionManager';
+import { backendTransport } from '../transports/runtime';
+import { windowTitleAdapter } from '../platform/runtime';
 import { isMultiDatabaseCapable, usesMultiDatabaseLayout, getEffectiveDatabase, getDatabaseList, reconcileDatabaseSelection } from '../utils/database';
 
 /** Label of the main window; Tauri defaults to this when none is configured. */
@@ -43,7 +42,7 @@ const getRoutinesOrEmpty = async (
 ): Promise<RoutineMetadataResult> => {
   try {
     return {
-      routines: await invoke<RoutineInfo[]>('get_routines', { connectionId, schema }),
+      routines: await backendTransport.listRoutines({ connectionId, schema }),
     };
   } catch (error) {
     onError(error, schema);
@@ -146,7 +145,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
               : activeDatabaseName;
           title = `tabularis - ${activeConnectionName} (${dbDisplay}${schemaSuffix})`;
         }
-        await invoke('set_window_title', { title });
+        await windowTitleAdapter.setTitle(title);
       } catch (e) {
         console.error('Failed to update window title', e);
       }
@@ -199,7 +198,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     // ones disappear.
     if (data?.allDatabasesMode) {
       try {
-        const available = await invoke<string[]>('get_available_databases', { connectionId });
+        const available = await backendTransport.listAvailableDatabases(connectionId);
         const added = available.filter(db => !current.includes(db));
         const removed = current.filter(db => !available.includes(db));
         if (added.length > 0 || removed.length > 0) {
@@ -229,7 +228,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const available = await invoke<string[]>('get_available_databases', { connectionId });
+      const available = await backendTransport.listAvailableDatabases(connectionId);
 
       // Same guard as the connect-time reconciliation: an incomplete server
       // list (e.g. restricted privileges) must not be mistaken for missing
@@ -249,15 +248,12 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
         // have if triggered outside of connect() - flagging rather than
         // guessing at a fix here.
         updateConnectionData(connectionId, { selectedDatabases: selection });
-        invoke('set_selected_databases', {
-          connectionId,
-          databases: selection,
-        }).catch(e => console.error('Failed to persist reconciled database selection:', e));
+        backendTransport.setSelectedDatabases(connectionId, selection).catch(e => console.error('Failed to persist reconciled database selection:', e));
         showToast(t('sidebar.droppedDatabasesRemoved', { names: removed.join(', ') }), {
           title: t('sidebar.databaseSelectionUpdated'),
           kind: 'warning',
         });
-        invoke('log_frontend_event', {
+        backendTransport.logClientEvent({
           level: 'warn',
           message: `Connection "${conn.name}": removed ${removed.join(', ')} from the database selection (no longer on the server)`,
         }).catch(() => {});
@@ -284,7 +280,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     if (!connId) return;
     updateConnectionData(connId, { isLoadingTables: true });
     try {
-      const result = await invoke<TableInfo[]>('get_tables', { connectionId: connId });
+      const result = await backendTransport.listTables({ connectionId: connId });
       updateConnectionData(connId, { tables: result, isLoadingTables: false });
     } catch (e) {
       console.error('Failed to refresh tables:', e);
@@ -297,7 +293,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     if (!connId) return;
     updateConnectionData(connId, { isLoadingViews: true });
     try {
-      const result = await invoke<ViewInfo[]>('get_views', { connectionId: connId });
+      const result = await backendTransport.listViews({ connectionId: connId });
       updateConnectionData(connId, { views: result, isLoadingViews: false });
     } catch (e) {
       console.error('Failed to refresh views:', e);
@@ -310,7 +306,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     if (!connId) return;
     updateConnectionData(connId, { isLoadingRoutines: true });
     try {
-      const result = await invoke<RoutineInfo[]>('get_routines', { connectionId: connId });
+      const result = await backendTransport.listRoutines({ connectionId: connId });
       updateConnectionData(connId, {
         routines: result,
         isLoadingRoutines: false,
@@ -330,7 +326,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     if (!connId) return;
     updateConnectionData(connId, { isLoadingTriggers: true });
     try {
-      const result = await invoke<TriggerInfo[]>('get_triggers', { connectionId: connId });
+      const result = await backendTransport.listTriggers({ connectionId: connId });
       updateConnectionData(connId, { triggers: result, isLoadingTriggers: false });
     } catch (e) {
       console.error('Failed to refresh triggers:', e);
@@ -357,13 +353,13 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const [tablesResult, viewsResult, materializedViewsResult, routineMetadata, triggersResult] = await Promise.all([
-        invoke<TableInfo[]>('get_tables', { connectionId: connId, schema }),
-        invoke<ViewInfo[]>('get_views', { connectionId: connId, schema }),
+        backendTransport.listTables({ connectionId: connId, schema }),
+        backendTransport.listViews({ connectionId: connId, schema }),
         (currentData.capabilities?.materialized_views
-          ? invoke<ViewInfo[]>('get_materialized_views', { connectionId: connId, schema }).catch(() => [] as ViewInfo[])
+          ? backendTransport.listMaterializedViews({ connectionId: connId, schema }).catch(() => [] as ViewInfo[])
           : Promise.resolve([] as ViewInfo[])),
         getRoutinesOrEmpty(connId, schema, handleRoutineMetadataError),
-        invoke<TriggerInfo[]>('get_triggers', { connectionId: connId, schema }).catch(() => [] as TriggerInfo[]),
+        backendTransport.listTriggers({ connectionId: connId, schema }).catch(() => [] as TriggerInfo[]),
       ]);
 
       const freshData = connectionDataMap[connId];
@@ -417,13 +413,13 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const [tablesResult, viewsResult, materializedViewsResult, routineMetadata, triggersResult] = await Promise.all([
-        invoke<TableInfo[]>('get_tables', { connectionId: connId, schema }),
-        invoke<ViewInfo[]>('get_views', { connectionId: connId, schema }),
+        backendTransport.listTables({ connectionId: connId, schema }),
+        backendTransport.listViews({ connectionId: connId, schema }),
         (currentData.capabilities?.materialized_views
-          ? invoke<ViewInfo[]>('get_materialized_views', { connectionId: connId, schema }).catch(() => [] as ViewInfo[])
+          ? backendTransport.listMaterializedViews({ connectionId: connId, schema }).catch(() => [] as ViewInfo[])
           : Promise.resolve([] as ViewInfo[])),
         getRoutinesOrEmpty(connId, schema, handleRoutineMetadataError),
-        invoke<TriggerInfo[]>('get_triggers', { connectionId: connId, schema }).catch(() => [] as TriggerInfo[]),
+        backendTransport.listTriggers({ connectionId: connId, schema }).catch(() => [] as TriggerInfo[]),
       ]);
 
       const freshData = connectionDataMap[connId];
@@ -480,10 +476,10 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const [tablesResult, viewsResult, routineMetadata, triggersResult] = await Promise.all([
-        invoke<TableInfo[]>('get_tables', { connectionId: connId, schema: database }),
-        invoke<ViewInfo[]>('get_views', { connectionId: connId, schema: database }),
+        backendTransport.listTables({ connectionId: connId, schema: database }),
+        backendTransport.listViews({ connectionId: connId, schema: database }),
         getRoutinesOrEmpty(connId, database, handleRoutineMetadataError),
-        invoke<TriggerInfo[]>('get_triggers', { connectionId: connId, schema: database }).catch(() => [] as TriggerInfo[]),
+        backendTransport.listTriggers({ connectionId: connId, schema: database }).catch(() => [] as TriggerInfo[]),
       ]);
 
       const freshData = connectionDataMap[connId];
@@ -536,10 +532,10 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const [tablesResult, viewsResult, routineMetadata, triggersResult] = await Promise.all([
-        invoke<TableInfo[]>('get_tables', { connectionId: connId, schema: database }),
-        invoke<ViewInfo[]>('get_views', { connectionId: connId, schema: database }),
+        backendTransport.listTables({ connectionId: connId, schema: database }),
+        backendTransport.listViews({ connectionId: connId, schema: database }),
         getRoutinesOrEmpty(connId, database, handleRoutineMetadataError),
-        invoke<TriggerInfo[]>('get_triggers', { connectionId: connId, schema: database }).catch(() => [] as TriggerInfo[]),
+        backendTransport.listTriggers({ connectionId: connId, schema: database }).catch(() => [] as TriggerInfo[]),
       ]);
 
       const freshData = connectionDataMap[connId];
@@ -589,10 +585,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     });
 
     try {
-      await invoke('set_selected_schemas', {
-        connectionId: connId,
-        schemas: newSchemas,
-      });
+      await backendTransport.setSelectedSchemas(connId, newSchemas);
     } catch (e) {
       console.error('Failed to persist selected schemas:', e);
     }
@@ -608,7 +601,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       const nextSchema = newSchemas[0] || null;
       updateConnectionData(connId, { activeSchema: nextSchema });
       if (nextSchema) {
-        invoke('set_schema_preference', { connectionId: connId, schema: nextSchema }).catch(() => {});
+        backendTransport.setSchemaPreference(connId, nextSchema).catch(() => {});
       }
     }
   }, [activeConnectionId, connectionDataMap, updateConnectionData, loadSchemaData]);
@@ -633,10 +626,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     });
 
     if (newDatabases.length > 0) {
-      invoke('set_selected_databases', {
-        connectionId: connId,
-        databases: newDatabases,
-      }).catch(e => console.error('Failed to persist selected databases:', e));
+      backendTransport.setSelectedDatabases(connId, newDatabases).catch(e => console.error('Failed to persist selected databases:', e));
     }
 
     for (const db of newDatabases) {
@@ -672,7 +662,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     setActiveTable(null);
 
     try {
-      const allConnections = await invoke<SavedConnection[]>('get_connections');
+      const allConnections = await backendTransport.listConnections();
       const conn = allConnections.find(c => c.id === connectionId);
       if (!conn) {
         throw new Error('Connection not found');
@@ -683,7 +673,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       // Fetch driver manifest to access capabilities (driver-agnostic feature detection)
       let driverManifest: PluginManifest | null = null;
       try {
-        driverManifest = await invoke<PluginManifest | null>('get_driver_manifest', { driverId: driver });
+        driverManifest = await backendTransport.getDriverManifest(driver);
       } catch {
         // Manifest not found; capabilities will be null and features will degrade gracefully
       }
@@ -700,11 +690,8 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       });
 
       try {
-        await invoke<string>('test_connection', {
-          request: {
-            params: conn.params,
-            connection_id: connectionId,
-          },
+        await backendTransport.testSavedConnection({
+          connection: conn,
         });
       } catch (testError) {
         const errorMsg = toErrorMessage(testError);
@@ -721,7 +708,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Register for health-check pinging.
-      await invoke('register_active_connection', { connectionId });
+      await backendTransport.registerActiveConnection(connectionId);
 
       const savedDbList = isMultiDatabaseCapable(capabilities) ? getDatabaseList(dbParam) : [];
       // Empty selection on a multi-db driver = "all databases" mode: the list
@@ -739,7 +726,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
 
       if (allDatabasesMode) {
         try {
-          dbList = await invoke<string[]>('get_available_databases', { connectionId });
+          dbList = await backendTransport.listAvailableDatabases(connectionId);
           isMultiDb = dbList.length > 0;
         } catch (e) {
           // Without a database list the connection is unusable (it has no
@@ -760,7 +747,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
         // Reconcile the saved selection against the server so databases
         // dropped outside the app don't linger in the sidebar (#518).
         try {
-          const available = await invoke<string[]>('get_available_databases', { connectionId });
+          const available = await backendTransport.listAvailableDatabases(connectionId);
           // The primary database must exist while this connection is open: if
           // the server list doesn't include it, the list is unreliable (e.g.
           // filtered by privileges) and pruning from it would drop valid
@@ -770,15 +757,12 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
             if (removed.length > 0) {
               dbList = selection;
               isMultiDb = selection.length >= 1;
-              invoke('set_selected_databases', {
-                connectionId,
-                databases: selection,
-              }).catch(e => console.error('Failed to persist reconciled database selection:', e));
+              backendTransport.setSelectedDatabases(connectionId, selection).catch(e => console.error('Failed to persist reconciled database selection:', e));
               showToast(t('sidebar.droppedDatabasesRemoved', { names: removed.join(', ') }), {
                 title: t('sidebar.databaseSelectionUpdated'),
                 kind: 'warning',
               });
-              invoke('log_frontend_event', {
+              backendTransport.logClientEvent({
                 level: 'warn',
                 message: `Connection "${conn.name}": removed ${removed.join(', ')} from the database selection (no longer on the server)`,
               }).catch(() => {});
@@ -800,10 +784,10 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
         if (firstDb) {
           try {
             const [tablesResult, viewsResult, routineMetadata, triggersResult] = await Promise.all([
-              invoke<TableInfo[]>('get_tables', { connectionId, schema: firstDb }),
-              invoke<ViewInfo[]>('get_views', { connectionId, schema: firstDb }),
+              backendTransport.listTables({ connectionId, schema: firstDb }),
+              backendTransport.listViews({ connectionId, schema: firstDb }),
               getRoutinesOrEmpty(connectionId, firstDb, handleRoutineMetadataError),
-              invoke<TriggerInfo[]>('get_triggers', { connectionId, schema: firstDb }).catch(() => [] as TriggerInfo[]),
+              backendTransport.listTriggers({ connectionId, schema: firstDb }).catch(() => [] as TriggerInfo[]),
             ]);
             initialDbMap = {
               [firstDb]: {
@@ -842,12 +826,12 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
         updateConnectionData(connectionId, { isLoadingSchemas: true });
 
         try {
-          const schemasResult = await invoke<string[]>('get_schemas', { connectionId });
+          const schemasResult = await backendTransport.listSchemas(connectionId);
           updateConnectionData(connectionId, { schemas: schemasResult });
 
           let savedSelection: string[] = [];
           try {
-            savedSelection = await invoke<string[]>('get_selected_schemas', { connectionId });
+            savedSelection = await backendTransport.getSelectedSchemas(connectionId);
           } catch {
             // Ignore - no saved selection exists yet
           }
@@ -857,7 +841,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
           if (validSelection.length > 0) {
             let preferredSchema = validSelection[0];
             try {
-              const saved = await invoke<string | null>('get_schema_preference', { connectionId });
+              const saved = await backendTransport.getSchemaPreference(connectionId);
               if (saved && validSelection.includes(saved)) {
                 preferredSchema = saved;
               }
@@ -866,13 +850,13 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
             }
 
             const [tablesResult, viewsResult, materializedViewsResult, routineMetadata, triggersResult] = await Promise.all([
-              invoke<TableInfo[]>('get_tables', { connectionId, schema: preferredSchema }),
-              invoke<ViewInfo[]>('get_views', { connectionId, schema: preferredSchema }),
+              backendTransport.listTables({ connectionId, schema: preferredSchema }),
+              backendTransport.listViews({ connectionId, schema: preferredSchema }),
               (capabilities?.materialized_views
-                ? invoke<ViewInfo[]>('get_materialized_views', { connectionId, schema: preferredSchema }).catch(() => [] as ViewInfo[])
+                ? backendTransport.listMaterializedViews({ connectionId, schema: preferredSchema }).catch(() => [] as ViewInfo[])
                 : Promise.resolve([] as ViewInfo[])),
               getRoutinesOrEmpty(connectionId, preferredSchema, handleRoutineMetadataError),
-              invoke<TriggerInfo[]>('get_triggers', { connectionId, schema: preferredSchema }).catch(() => [] as TriggerInfo[]),
+              backendTransport.listTriggers({ connectionId, schema: preferredSchema }).catch(() => [] as TriggerInfo[]),
             ]);
 
             updateConnectionData(connectionId, {
@@ -929,10 +913,10 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
         }
       } else {
         const [tablesResult, viewsResult, routineMetadata, triggersResult] = await Promise.all([
-          invoke<TableInfo[]>('get_tables', { connectionId }),
-          invoke<ViewInfo[]>('get_views', { connectionId }),
+          backendTransport.listTables({ connectionId }),
+          backendTransport.listViews({ connectionId }),
           getRoutinesOrEmpty(connectionId, undefined, handleRoutineMetadataError),
-          invoke<TriggerInfo[]>('get_triggers', { connectionId }).catch(() => [] as TriggerInfo[]),
+          backendTransport.listTriggers({ connectionId }).catch(() => [] as TriggerInfo[]),
         ]);
 
         updateConnectionData(connectionId, {
@@ -969,7 +953,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     clearAutocompleteCache(targetId);
 
     try {
-      await invoke('disconnect_connection', { connectionId: targetId });
+      await backendTransport.disconnectConnection(targetId);
     } catch (error) {
       console.error(`[DatabaseProvider] Failed to disconnect from ${targetId}:`, error);
     }
@@ -988,7 +972,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     // the empty list to protect the startup state) — otherwise disconnecting the
     // last connection would leave it in `last_open_connection_ids` and the app
     // would auto-reconnect it (and restore its tabs) on next launch.
-    invoke('set_last_open_connections', { connectionIds: remainingIds }).catch(() => {});
+    backendTransport.setLastOpenConnections(remainingIds).catch(() => {});
 
     if (activeConnectionId === targetId) {
       if (remainingIds.length > 0) {
@@ -996,7 +980,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setActiveConnectionId(null);
         setActiveTable(null);
-        invoke('set_last_active_connection', { connectionId: null }).catch(() => {});
+        backendTransport.setLastActiveConnection(null).catch(() => {});
       }
     }
   };
@@ -1031,14 +1015,14 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     setActiveTable(table);
     if (schema !== undefined && schema !== null && activeConnectionId) {
       updateConnectionData(activeConnectionId, { activeSchema: schema });
-      invoke('set_schema_preference', { connectionId: activeConnectionId, schema }).catch(() => {});
+      backendTransport.setSchemaPreference(activeConnectionId, schema).catch(() => {});
     }
   }, [activeConnectionId, updateConnectionData]);
 
   const loadConnections = useCallback(async () => {
     setIsLoadingConnections(true);
     try {
-      const result = await invoke<ConnectionsFile>('get_connections_with_groups');
+      const result = await backendTransport.listConnectionCatalogue();
       setConnections(result.connections);
       setConnectionGroups(result.groups);
     } catch (e) {
@@ -1090,7 +1074,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   // the value before the startup auto-connect gets a chance to read it.
   useEffect(() => {
     if (!activeConnectionId) return;
-    invoke('set_last_active_connection', { connectionId: activeConnectionId }).catch(() => {});
+    backendTransport.setLastActiveConnection(activeConnectionId).catch(() => {});
   }, [activeConnectionId]);
 
   // Persist the full set of open connections so the app can reopen all of them
@@ -1107,7 +1091,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   // longer needs to chase the empty state for correctness.)
   useEffect(() => {
     if (openConnectionIds.length === 0) return;
-    invoke('set_last_open_connections', { connectionIds: openConnectionIds }).catch(() => {});
+    backendTransport.setLastOpenConnections(openConnectionIds).catch(() => {});
   }, [openConnectionIds]);
 
   // Listen for backend health-check failures and clean up dead connections.
@@ -1142,7 +1126,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   // Track the set of connections open anywhere (across all windows). Seed from
   // the backend snapshot, then keep in sync via the broadcast event.
   useEffect(() => {
-    invoke<string[]>('get_active_connections')
+    backendTransport.listActiveConnections()
       .then(setGloballyOpenConnectionIds)
       .catch(() => {});
     const unlisten = listen<string[]>('connections:active-changed', (event) => {
@@ -1185,7 +1169,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     // and the Rust deserializer maps it to `None`. Passing `undefined`
     // would also work because serde's default attribute treats it the
     // same, but we normalise to `null` for explicitness.
-    const group = await invoke<ConnectionGroup>('create_connection_group', {
+    const group = await backendTransport.createConnectionGroup({
       name,
       parentId: parentId ?? null,
     });
@@ -1197,13 +1181,13 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     path: string,
     parentId?: string | null
   ): Promise<ConnectionGroup> => {
-    const group = await invoke<ConnectionGroup>('create_group_path', {
+    const group = await backendTransport.createConnectionGroupPath({
       path,
       parentId: parentId ?? null,
     });
     // Re-fetch the full group list because the backend may have reused
     // existing segments and created new ones we don't yet know about.
-    const fresh = await invoke<ConnectionGroup[]>('get_connection_groups');
+    const fresh = await backendTransport.listConnectionGroups();
     setConnectionGroups(fresh);
     return group;
   }, []);
@@ -1212,7 +1196,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     id: string,
     updates: { name?: string; collapsed?: boolean; sort_order?: number }
   ): Promise<void> => {
-    await invoke('update_connection_group', { id, ...updates });
+    await backendTransport.updateConnectionGroup(id, updates);
     setConnectionGroups(prev =>
       prev.map(g => (g.id === id ? { ...g, ...updates } : g))
     );
@@ -1222,7 +1206,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     id: string,
     parentId: string | null
   ): Promise<void> => {
-    await invoke('move_group_to_parent', { id, parentId });
+    await backendTransport.moveConnectionGroup(id, parentId);
     setConnectionGroups(prev =>
       prev.map(g => (g.id === id ? { ...g, parent_id: parentId } : g))
     );
@@ -1235,8 +1219,8 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     // optimistic state — this keeps the optimistic update trivial and
     // guarantees the UI matches the persisted file even if the cascade
     // behaviour evolves.
-    await invoke('delete_connection_group', { id });
-    const fresh = await invoke<ConnectionsFile>('get_connections_with_groups');
+    await backendTransport.deleteConnectionGroup(id);
+    const fresh = await backendTransport.listConnectionCatalogue();
     setConnections(fresh.connections);
     setConnectionGroups(fresh.groups);
   }, []);
@@ -1245,7 +1229,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     connectionId: string,
     groupId: string | null
   ): Promise<void> => {
-    await invoke('move_connection_to_group', { connectionId, groupId });
+    await backendTransport.moveConnectionToGroup(connectionId, groupId);
     setConnections(prev =>
       prev.map(c => (c.id === connectionId ? { ...c, group_id: groupId ?? undefined } : c))
     );
@@ -1254,7 +1238,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   const reorderGroups = useCallback(async (
     groupOrders: Array<[string, number]>
   ): Promise<void> => {
-    await invoke('reorder_groups', { groupOrders });
+    await backendTransport.reorderConnectionGroups(groupOrders);
     setConnectionGroups(prev => {
       const orderMap = new Map(groupOrders);
       return prev.map(g => ({
@@ -1267,7 +1251,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   const reorderConnectionsInGroup = useCallback(async (
     connectionOrders: Array<[string, number]>
   ): Promise<void> => {
-    await invoke('reorder_connections_in_group', { connectionOrders });
+    await backendTransport.reorderConnections(connectionOrders);
     setConnections(prev => {
       const orderMap = new Map(connectionOrders);
       return prev.map(c => ({

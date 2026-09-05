@@ -6459,7 +6459,7 @@ dependencies = [
 
 [[package]]
 name = "tabularis"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -6497,6 +6497,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "sysinfo",
+ "tabularis-core",
  "tabularium-sdk",
  "tauri",
  "tauri-build",
@@ -6519,6 +6520,13 @@ dependencies = [
  "uuid",
  "which",
  "zip",
+]
+
+[[package]]
+name = "tabularis-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

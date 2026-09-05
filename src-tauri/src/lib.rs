@@ -18,18 +18,19 @@ pub mod backup;
 pub mod cli;
 pub mod clipboard_import;
 pub mod commands;
+pub mod config;
 pub mod connection_appearance;
-pub mod connection_import;
-pub mod connection_import_commands;
 #[cfg(test)]
 pub mod connection_appearance_tests;
-pub mod config;
 pub mod connection_cache;
 #[cfg(test)]
 pub mod connection_cache_tests;
+pub mod connection_import;
+pub mod connection_import_commands;
 pub mod connection_migrations;
 #[cfg(test)]
 pub mod connection_migrations_tests;
+mod connection_persistence_adapter;
 pub mod connection_tags;
 pub mod connection_window;
 #[cfg(test)]
@@ -46,16 +47,15 @@ pub mod export;
 pub mod export_crypto;
 #[cfg(test)]
 pub mod export_import_tests;
-pub mod health_check;
 #[cfg(test)]
 pub mod group_tree_tests;
+pub mod health_check;
 pub mod heartbeat;
 #[cfg(test)]
 pub mod heartbeat_tests;
 pub mod json_viewer;
-pub mod keychain_utils;
-pub mod results_window;
 pub mod k8s_tunnel;
+pub mod keychain_utils;
 pub mod log_commands;
 pub mod logger;
 pub mod mcp;
@@ -75,14 +75,16 @@ pub mod preferences;
 pub mod query_history;
 #[cfg(test)]
 pub mod query_history_tests;
-pub mod sql_database_statements;
+pub mod results_window;
 pub mod saved_queries;
 #[cfg(test)]
 pub mod saved_queries_tests;
-pub mod ssh_tunnel;
+pub mod services;
+pub mod sql_database_statements;
 pub mod sqlite_database;
 #[cfg(test)]
 pub mod sqlite_database_tests;
+pub mod ssh_tunnel;
 pub mod task_manager;
 pub mod theme_commands;
 pub mod theme_models;
@@ -364,9 +366,7 @@ pub fn run() {
             // meant to be a dedicated plan viewer, not a full app launch.
             if let Some(path) = args.explain.clone() {
                 log::info!("CLI --explain received: {path}");
-                if let Err(e) =
-                    explain_import::spawn_visual_explain_window(app, Some(path))
-                {
+                if let Err(e) = explain_import::spawn_visual_explain_window(app, Some(path)) {
                     log::error!("Failed to open Visual Explain window: {e}");
                 }
                 // Close the default main window only AFTER visual-explain is

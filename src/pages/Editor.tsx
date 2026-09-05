@@ -73,6 +73,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { windowTitleAdapter } from "../platform/runtime";
 import { TableToolbar } from "../components/ui/TableToolbar";
 import { DataGrid } from "../components/ui/DataGrid";
 import { MultiResultPanel } from "../components/ui/MultiResultPanel";
@@ -512,7 +513,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
           }
           title = `tabularis - ${activeConnectionName} (${dbDisplay}${schemaSuffix})`;
         }
-        await invoke("set_window_title", { title });
+        await windowTitleAdapter.setTitle(title);
       } catch (e) {
         console.error("Failed to update window title", e);
       }

@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tabularis_core::{
+    QueryCancellationRepository, QueryExecutionInput, QueryService, SchemaResource,
+};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::task::AbortHandle;
 use urlencoding::encode;
@@ -11,9 +14,9 @@ use crate::credential_cache;
 use crate::keychain_utils;
 use crate::models::{
     BatchStatementResult, ColumnDefinition, ConnectionGroup, ConnectionParams, ConnectionsFile,
-    ExplainQueryOutput, ExportPayload, ForeignKey, Index, K8sConnection, K8sConnectionInput, QueryResult,
-    RoutineInfo, RoutineParameter, SavedConnection, SshConnection, SshConnectionInput, SshTestParams,
-    TableColumn, TableInfo, TestConnectionRequest, TriggerInfo,
+    ExplainQueryOutput, ExportPayload, ForeignKey, Index, K8sConnection, K8sConnectionInput,
+    QueryResult, RoutineInfo, RoutineParameter, SavedConnection, SshConnection, SshConnectionInput,
+    SshTestParams, TableColumn, TableInfo, TestConnectionRequest, TriggerInfo,
 };
 use crate::persistence;
 use crate::ssh_tunnel::{get_tunnels, SshTunnel};
@@ -52,6 +55,12 @@ impl Default for QueryCancellationState {
     }
 }
 
+impl QueryCancellationRepository for QueryCancellationState {
+    fn cancel(&self, connection_id: &str) -> Result<(), String> {
+        cancel_query_impl(self, connection_id)
+    }
+}
+
 /// Push `handle` into the slot for `key`, first pruning any handles that
 /// have already finished so the Vec does not grow unboundedly across many
 /// sequential queries on the same connection.
@@ -87,13 +96,7 @@ pub(crate) fn unregister_abort_handle(
 /// editors insert when the user pastes a query. Called on every query the
 /// UI hands off to a driver.
 fn sanitize_user_query(query: &str) -> String {
-    query
-        .trim()
-        .trim_end_matches(';')
-        .replace('\u{2018}', "'")
-        .replace('\u{2019}', "'")
-        .replace('\u{201C}', "\"")
-        .replace('\u{201D}', "\"")
+    QueryService::normalize_query(query)
 }
 
 // --- Persistence Helpers ---
@@ -291,10 +294,7 @@ fn build_tunnel_map_key(
 
 /// Resolve K8s tunnel params synchronously (no saved-connection lookup; uses inline fields only).
 fn resolve_k8s_params(params: &ConnectionParams) -> Result<ConnectionParams, String> {
-    let context = params
-        .k8s_context
-        .as_deref()
-        .ok_or("Missing K8s context")?;
+    let context = params.k8s_context.as_deref().ok_or("Missing K8s context")?;
     let namespace = params
         .k8s_namespace
         .as_deref()
@@ -337,7 +337,11 @@ fn resolve_k8s_params(params: &ConnectionParams) -> Result<ConnectionParams, Str
 
     log::info!(
         "Creating new K8s tunnel for {}/{} in {}:{} (context: {})",
-        resource_type, resource_name, namespace, port, context
+        resource_type,
+        resource_name,
+        namespace,
+        port,
+        context
     );
 
     let tunnel = crate::k8s_tunnel::K8sTunnel::new(
@@ -372,7 +376,7 @@ pub fn resolve_connection_params(params: &ConnectionParams) -> Result<Connection
     // K8s and SSH are mutually exclusive
     if params.k8s_enabled.unwrap_or(false) && params.ssh_enabled.unwrap_or(false) {
         return Err(
-            "Kubernetes and SSH tunnel cannot both be enabled for the same connection".to_string()
+            "Kubernetes and SSH tunnel cannot both be enabled for the same connection".to_string(),
         );
     }
 
@@ -488,6 +492,7 @@ fn validate_connection_uri_persistence(params: &ConnectionParams) -> Result<(), 
 /// Write the secret first, then persist `connections.json`. If persistence
 /// fails the secret is restored to its previous value so the keychain never
 /// drifts from the file.
+#[cfg(test)]
 fn persist_secret_change(
     apply: impl FnOnce() -> Result<(), String>,
     persist: impl FnOnce() -> Result<(), String>,
@@ -503,59 +508,6 @@ fn persist_secret_change(
             Err(rollback_error) => Err(format!("{error} ({rollback_error})")),
         },
     }
-}
-
-/// `change` is `None` to leave the stored URI untouched, `Some(Some(uri))` to
-/// write it, and `Some(None)` to clear it.
-fn persist_connection_uri_change(
-    cache: &credential_cache::CredentialCache,
-    connection_id: &str,
-    stored_in_keychain: bool,
-    change: Option<Option<&str>>,
-    persist: impl FnOnce() -> Result<(), String>,
-) -> Result<(), String> {
-    let Some(value) = change else {
-        return persist();
-    };
-    let previous_keychain = stored_in_keychain
-        .then(|| keychain_utils::get_connection_uri(connection_id))
-        .transpose()
-        .map_err(|_| "Failed to read the stored connection URI from the OS keychain".to_string())?;
-    let previous_cache = cache
-        .connection_uris
-        .lock()
-        .unwrap()
-        .get(connection_id)
-        .cloned();
-
-    persist_secret_change(
-        || {
-            if let Some(value) = value {
-                keychain_utils::set_connection_uri(connection_id, value)?;
-                credential_cache::set_connection_uri_cached(cache, connection_id, value);
-            } else {
-                keychain_utils::delete_connection_uri(connection_id)?;
-                credential_cache::invalidate_connection_uri(cache, connection_id);
-            }
-            Ok(())
-        },
-        persist,
-        || {
-            let keychain_result = match previous_keychain.as_deref() {
-                Some(value) => keychain_utils::set_connection_uri(connection_id, value),
-                None => keychain_utils::delete_connection_uri(connection_id),
-            };
-            let mut entries = cache.connection_uris.lock().unwrap();
-            match (&keychain_result, previous_cache) {
-                // Only re-pin the old value once the keychain actually holds it
-                // again. If the restore failed, drop the entry so the next read
-                // consults the keychain instead of trusting a stale copy.
-                (Ok(()), Some(entry)) => _ = entries.insert(connection_id.to_string(), entry),
-                (Ok(()), None) | (Err(_), _) => _ = entries.remove(connection_id),
-            }
-            keychain_result.map_err(|_| "Failed to roll back the stored connection URI".to_string())
-        },
-    )
 }
 
 /// Strip the URI out of the params that go to `connections.json`, leaving only
@@ -599,8 +551,7 @@ pub fn find_connection_by_id<R: Runtime>(
     app: &AppHandle<R>,
     id: &str,
 ) -> Result<SavedConnection, String> {
-    let conn_cache =
-        app.state::<std::sync::Arc<crate::connection_cache::ConnectionCache>>();
+    let conn_cache = app.state::<std::sync::Arc<crate::connection_cache::ConnectionCache>>();
 
     let mut conn = match conn_cache.lookup(id) {
         crate::connection_cache::CacheLookup::Hit(c) => c,
@@ -626,9 +577,7 @@ pub fn find_connection_by_id<R: Runtime>(
     // cold miss = keychain call + cache). Skip IAM-auth connections: their
     // 15-min tokens must come from the `password` field, never the keychain,
     // so a stale token from an older release can't be surfaced in the modal.
-    if conn.params.save_in_keychain.unwrap_or(false)
-        && !conn.params.use_iam_auth.unwrap_or(false)
-    {
+    if conn.params.save_in_keychain.unwrap_or(false) && !conn.params.use_iam_auth.unwrap_or(false) {
         match credential_cache::get_db_password_cached(&cache, &conn.id) {
             Ok(pwd) => conn.params.password = Some(pwd),
             Err(e) => eprintln!(
@@ -735,7 +684,13 @@ pub async fn get_schemas<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    drv.get_schemas(&params).await
+    crate::services::discover_schema_names(
+        drv.as_ref(),
+        &params,
+        connection_id,
+        SchemaResource::Schemas,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -754,7 +709,13 @@ pub async fn get_available_databases<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    drv.get_databases(&params).await
+    crate::services::discover_schema_names(
+        drv.as_ref(),
+        &params,
+        connection_id,
+        SchemaResource::Databases,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -808,8 +769,12 @@ pub async fn get_routines<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    let result = drv.get_routines(&params, schema.as_deref()).await;
-    let database = schema.as_deref().unwrap_or_else(|| params.database.primary());
+    let result =
+        crate::services::discover_routines(drv.as_ref(), &params, connection_id, schema.clone())
+            .await;
+    let database = schema
+        .as_deref()
+        .unwrap_or_else(|| params.database.primary());
 
     match &result {
         Ok(routines) => log::info!("Retrieved {} routines from {}", routines.len(), database),
@@ -997,64 +962,28 @@ pub async fn save_connection<R: Runtime>(
     environment: Option<String>,
 ) -> Result<SavedConnection, String> {
     log::info!("Saving new connection: {}", name);
-    validate_connection_uri_persistence(&params)?;
-
     let path = get_config_path(&app)?;
-    let mut conn_file = persistence::load_connections_file(&path).unwrap_or_default();
-
     let id = Uuid::new_v4().to_string();
     let cache = app.state::<std::sync::Arc<crate::credential_cache::CredentialCache>>();
-    let connection_uri = runtime_connection_uri(&params).map(str::to_owned);
-    let mut params_to_save = params_for_persistence(&params, connection_uri.is_some());
-
-    if params.save_in_keychain.unwrap_or(false) {
-        log::debug!("Storing passwords in keychain for connection: {}", name);
-        if let Some(pwd) = &params.password {
-            keychain_utils::set_db_password(&id, pwd)?;
-            credential_cache::set_db_password_cached(&cache, &id, pwd);
-        }
-        if params.ssh_enabled.unwrap_or(false) {
-            if let Some(ssh_pwd) = &params.ssh_password {
-                keychain_utils::set_ssh_password(&id, ssh_pwd)?;
-                credential_cache::set_ssh_password_cached(&cache, &id, ssh_pwd);
-            }
-            if let Some(ssh_passphrase) = &params.ssh_key_passphrase {
-                if !ssh_passphrase.trim().is_empty() {
-                    keychain_utils::set_ssh_key_passphrase(&id, ssh_passphrase)?;
-                    credential_cache::set_ssh_key_passphrase_cached(&cache, &id, ssh_passphrase);
-                }
-            }
-        }
-        params_to_save.password = None;
-        params_to_save.ssh_password = None;
-        params_to_save.ssh_key_passphrase = None;
-    }
-
-    let new_conn = SavedConnection {
-        id: id.clone(),
-        name: name.clone(),
-        params: params_to_save,
-        group_id: None,
-        sort_order: None,
-        detect_json_in_text_columns,
-        appearance: None,
-        tag_ids: None,
-        environment: validate_environment(environment)?,
-    };
-    conn_file.connections.push(new_conn.clone());
-    persist_connection_uri_change(
-        &cache,
-        &id,
-        false,
-        connection_uri.as_deref().map(Some),
-        || save_connections_and_invalidate(&app, &path, &conn_file),
+    let repository =
+        crate::connection_persistence_adapter::DesktopConnectionRepository::new(&app, path);
+    let credentials = crate::connection_persistence_adapter::DesktopConnectionCredentialStore::new(
+        cache.inner().as_ref(),
+    );
+    let returned = crate::services::persist_new_connection(
+        &repository,
+        &credentials,
+        crate::services::SaveConnectionInput {
+            id: id.clone(),
+            name: name.clone(),
+            params,
+            detect_json_in_text_columns,
+            environment,
+        },
     )?;
 
     log::info!("Connection saved successfully: {} (ID: {})", name, id);
-
-    let mut returned_conn = new_conn;
-    returned_conn.params = params; // Return with password for frontend state
-    Ok(returned_conn)
+    Ok(returned)
 }
 
 #[tauri::command]
@@ -1062,55 +991,35 @@ pub async fn delete_connection<R: Runtime>(app: AppHandle<R>, id: String) -> Res
     log::info!("Deleting connection: {}", id);
 
     let path = get_config_path(&app)?;
-    if !path.exists() {
+    let cache = app.state::<std::sync::Arc<crate::credential_cache::CredentialCache>>();
+    let repository =
+        crate::connection_persistence_adapter::DesktopConnectionRepository::new(&app, path);
+    let credentials = crate::connection_persistence_adapter::DesktopConnectionCredentialStore::new(
+        cache.inner().as_ref(),
+    );
+    let result = crate::services::persist_deleted_connection(&repository, &credentials, &id)?;
+    if !result.repository_existed {
         return Ok(());
     }
-
-    let mut conn_file = persistence::load_connections_file(&path)?;
-
-    let cache = app.state::<std::sync::Arc<crate::credential_cache::CredentialCache>>();
-    let uri_stored_in_keychain = conn_file
-        .connections
-        .iter()
-        .find(|c| c.id == id)
-        .and_then(|c| c.params.connection_uri_in_keychain)
-        .unwrap_or(false);
-
-    // Capture the appearance before retain so we can cascade-delete the icon file.
-    let appearance_to_delete = conn_file
-        .connections
-        .iter()
-        .find(|c| c.id == id)
-        .and_then(|c| c.appearance.clone());
-
-    let initial_count = conn_file.connections.len();
-    conn_file.connections.retain(|c| c.id != id);
-    let deleted = conn_file.connections.len() < initial_count;
-
-    // Attempt to remove passwords from keychain (ignore if not found)
-    keychain_utils::delete_db_password(&id).ok();
-    keychain_utils::delete_ssh_password(&id).ok();
-    keychain_utils::delete_ssh_key_passphrase(&id).ok();
-    persist_connection_uri_change(&cache, &id, uri_stored_in_keychain, Some(None), || {
-        save_connections_and_invalidate(&app, &path, &conn_file)
-    })?;
-    // Invalidate the in-memory cache for this connection
-    credential_cache::invalidate_all_for_connection(&cache, &id);
 
     // Cascade-delete the custom icon file if the connection used one.
     if let Ok(app_data) = app.path().app_data_dir() {
         let _ = crate::connection_appearance::cascade_delete_if_image(
             &app_data,
-            appearance_to_delete.as_ref(),
+            result.appearance.as_ref(),
         );
     }
 
     // Clean up query history for this connection
     if let Err(e) = crate::query_history::remove_history_for_connection(&app, &id).await {
-        log::warn!("Failed to remove query history for connection {}: {}", id, e);
+        log::warn!(
+            "Failed to remove query history for connection {}: {}",
+            id,
+            e
+        );
     }
 
-    if deleted {
+    if result.deleted {
         log::info!("Connection deleted successfully: {}", id);
     } else {
         log::warn!("Connection not found for deletion: {}", id);
@@ -1128,127 +1037,36 @@ pub async fn update_connection<R: Runtime>(
     detect_json_in_text_columns: Option<bool>,
     environment: Option<String>,
 ) -> Result<SavedConnection, String> {
-    validate_connection_uri_persistence(&params)?;
     let path = get_config_path(&app)?;
-    let mut conn_file = persistence::load_connections_file(&path)?;
-
-    let conn_idx = conn_file
-        .connections
-        .iter()
-        .position(|c| c.id == id)
-        .ok_or("Connection not found")?;
-
-    let existing_uri_in_keychain = conn_file.connections[conn_idx]
-        .params
-        .connection_uri_in_keychain
-        .unwrap_or(false);
-    // A stored URI belongs to the driver that produced it. Switching drivers
-    // must drop it rather than hand one driver's credentials to another.
-    let same_driver = conn_file.connections[conn_idx].params.driver == params.driver;
-    let connection_uri = runtime_connection_uri(&params).map(str::to_owned);
-    // The frontend sends the URI back only when the user retyped it. An edit
-    // that leaves the field untouched must keep the stored secret; an edit that
-    // explicitly clears the marker must delete it.
-    let preserve_stored_uri = connection_uri.is_none()
-        && same_driver
-        && params.save_in_keychain.unwrap_or(false)
-        && existing_uri_in_keychain
-        && params.connection_uri_in_keychain != Some(false);
-    let uri_change = match connection_uri.as_deref() {
-        Some(value) => Some(Some(value)),
-        None if preserve_stored_uri => None,
-        None => Some(None),
-    };
-    let mut params_to_save =
-        params_for_persistence(&params, connection_uri.is_some() || preserve_stored_uri);
-
     let cache = app.state::<std::sync::Arc<crate::credential_cache::CredentialCache>>();
-    if params.save_in_keychain.unwrap_or(false) {
-        if let Some(pwd) = &params.password {
-            keychain_utils::set_db_password(&id, pwd)?;
-            credential_cache::set_db_password_cached(&cache, &id, pwd);
-        }
-        if params.ssh_enabled.unwrap_or(false) {
-            if let Some(ssh_pwd) = &params.ssh_password {
-                keychain_utils::set_ssh_password(&id, ssh_pwd)?;
-                credential_cache::set_ssh_password_cached(&cache, &id, ssh_pwd);
-            }
-            if let Some(ssh_passphrase) = &params.ssh_key_passphrase {
-                if !ssh_passphrase.trim().is_empty() {
-                    keychain_utils::set_ssh_key_passphrase(&id, ssh_passphrase)?;
-                    credential_cache::set_ssh_key_passphrase_cached(&cache, &id, ssh_passphrase);
-                }
-            }
-        } else {
-            keychain_utils::delete_ssh_password(&id).ok();
-            keychain_utils::delete_ssh_key_passphrase(&id).ok();
-            credential_cache::invalidate_ssh_password(&cache, &id);
-            credential_cache::invalidate_ssh_key_passphrase(&cache, &id);
-        }
-        params_to_save.password = None;
-        params_to_save.ssh_password = None;
-        params_to_save.ssh_key_passphrase = None;
-    } else {
-        keychain_utils::delete_db_password(&id).ok();
-        keychain_utils::delete_ssh_password(&id).ok();
-        keychain_utils::delete_ssh_key_passphrase(&id).ok();
-        // The connection URI is cleared by its own transaction below, which
-        // needs the previous cache entry intact to roll back.
-        credential_cache::invalidate_db_password(&cache, &id);
-        credential_cache::invalidate_ssh_password(&cache, &id);
-        credential_cache::invalidate_ssh_key_passphrase(&cache, &id);
-    }
-
-    // Preserve existing group_id and sort_order from the original connection
-    let original_group_id = conn_file.connections[conn_idx].group_id.clone();
-    let original_sort_order = conn_file.connections[conn_idx].sort_order;
-    let original_db_selection = conn_file.connections[conn_idx].params.database.clone();
-    // Preserve user's appearance customization across edits
-    let original_appearance = conn_file.connections[conn_idx].appearance.clone();
-    // Tags are managed by set_connection_tags; preserve them across edits.
-    let original_tag_ids = conn_file.connections[conn_idx].tag_ids.clone();
-
-    let updated = SavedConnection {
-        id: id.clone(),
-        name,
-        params: params_to_save,
-        group_id: original_group_id,
-        sort_order: original_sort_order,
-        detect_json_in_text_columns,
-        appearance: original_appearance,
-        tag_ids: original_tag_ids,
-        environment: validate_environment(environment)?,
-    };
-
-    conn_file.connections[conn_idx] = updated.clone();
-
-    persist_connection_uri_change(&cache, &id, existing_uri_in_keychain, uri_change, || {
-        save_connections_and_invalidate(&app, &path, &conn_file)
-    })?;
+    let repository =
+        crate::connection_persistence_adapter::DesktopConnectionRepository::new(&app, path);
+    let credentials = crate::connection_persistence_adapter::DesktopConnectionCredentialStore::new(
+        cache.inner().as_ref(),
+    );
+    let result = crate::services::persist_updated_connection(
+        &repository,
+        &credentials,
+        crate::services::UpdateConnectionInput {
+            id: id.clone(),
+            name,
+            params,
+            detect_json_in_text_columns,
+            environment,
+        },
+    )?;
 
     // On single→multi transition, associate existing favorites/history (with no
     // database set) to the original single database name.
-    if let Some(previous_db) = crate::models::single_db_before_multi_transition(
-        &original_db_selection,
-        &params.database,
-    ) {
-        if let Err(e) = crate::saved_queries::backfill_missing_database_for_connection(
-            &app,
-            &id,
-            &previous_db,
-        ) {
-            log::warn!(
-                "Failed to backfill saved query database for {}: {}",
-                id,
-                e
-            );
+    if let Some(previous_db) = result.previous_database_for_backfill {
+        if let Err(e) =
+            crate::saved_queries::backfill_missing_database_for_connection(&app, &id, &previous_db)
+        {
+            log::warn!("Failed to backfill saved query database for {}: {}", id, e);
         }
-        if let Err(e) = crate::query_history::backfill_missing_database_for_connection(
-            &app,
-            &id,
-            &previous_db,
-        )
-        .await
+        if let Err(e) =
+            crate::query_history::backfill_missing_database_for_connection(&app, &id, &previous_db)
+                .await
         {
             log::warn!(
                 "Failed to backfill query history database for {}: {}",
@@ -1258,9 +1076,7 @@ pub async fn update_connection<R: Runtime>(
         }
     }
 
-    let mut returned_conn = updated;
-    returned_conn.params = params;
-    Ok(returned_conn)
+    Ok(result.connection)
 }
 
 /// Pure, testable core of `set_connection_appearance`.
@@ -1373,7 +1189,9 @@ pub async fn duplicate_connection<R: Runtime>(
         if let Some(ref mut a) = app_earance {
             if let Some(crate::models::IconOverride::Image { ref path }) = a.icon.clone() {
                 if let Ok(app_data) = app.path().app_data_dir() {
-                    match crate::connection_appearance::copy_icon_for_duplicate(&app_data, path, &new_id) {
+                    match crate::connection_appearance::copy_icon_for_duplicate(
+                        &app_data, path, &new_id,
+                    ) {
                         Ok(new_path) => {
                             a.icon = Some(crate::models::IconOverride::Image { path: new_path });
                         }
@@ -1941,9 +1759,7 @@ fn validate_k8s_connection_paths(k8s: &K8sConnectionInput) -> Result<(), String>
 }
 
 /// Load K8s connections synchronously from the config file.
-fn load_k8s_connections_sync<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<Vec<K8sConnection>, String> {
+fn load_k8s_connections_sync<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<K8sConnection>, String> {
     let path = get_k8s_config_path(app)?;
     if !path.exists() {
         return Ok(vec![]);
@@ -1973,8 +1789,7 @@ pub async fn get_k8s_connections<R: Runtime>(
         return Ok(vec![]);
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let connections: Vec<K8sConnection> =
-        serde_json::from_str(&content).unwrap_or_default();
+    let connections: Vec<K8sConnection> = serde_json::from_str(&content).unwrap_or_default();
     Ok(connections)
 }
 
@@ -2006,8 +1821,7 @@ pub async fn save_k8s_connection<R: Runtime>(
     };
 
     connections.push(connection.clone());
-    let json =
-        serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
     fs::write(&path, json).map_err(|e| e.to_string())?;
 
     Ok(connection)
@@ -2046,8 +1860,7 @@ pub async fn update_k8s_connection<R: Runtime>(
     };
 
     connections[idx] = connection.clone();
-    let json =
-        serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
     fs::write(&path, json).map_err(|e| e.to_string())?;
 
     Ok(connection)
@@ -2067,8 +1880,7 @@ pub async fn delete_k8s_connection<R: Runtime>(
     };
 
     connections.retain(|c| c.id != id);
-    let json =
-        serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&connections).map_err(|e| e.to_string())?;
     fs::write(&path, json).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -2161,7 +1973,7 @@ pub async fn expand_k8s_connection_params<R: Runtime>(
     // Mutual exclusion: K8s and SSH cannot both be active
     if params.ssh_enabled.unwrap_or(false) {
         return Err(
-            "Kubernetes and SSH tunnel cannot both be enabled for the same connection".to_string()
+            "Kubernetes and SSH tunnel cannot both be enabled for the same connection".to_string(),
         );
     }
 
@@ -2228,10 +2040,7 @@ pub async fn expand_k8s_connection_params<R: Runtime>(
     {
         let tunnels = crate::k8s_tunnel::get_tunnels().lock().unwrap();
         if let Some(tunnel) = tunnels.get(&map_key) {
-            log::debug!(
-                "Reusing existing K8s tunnel on port {}",
-                tunnel.local_port
-            );
+            log::debug!("Reusing existing K8s tunnel on port {}", tunnel.local_port);
             let mut new_params = params.clone();
             new_params.k8s_enabled = Some(false);
             new_params.host = Some("127.0.0.1".to_string());
@@ -2288,8 +2097,7 @@ async fn get_k8s_connection_by_id<R: Runtime>(
         return Err(format!("K8s connection with ID {} not found", k8s_id));
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let connections: Vec<K8sConnection> =
-        serde_json::from_str(&content).unwrap_or_default();
+    let connections: Vec<K8sConnection> = serde_json::from_str(&content).unwrap_or_default();
     connections
         .into_iter()
         .find(|c| c.id == k8s_id)
@@ -2418,26 +2226,15 @@ pub async fn test_connection<R: Runtime>(
     };
     emit_test_progress(&app, progress_id, "dbConnect", "start", Some(db_target));
 
-    // For file-based drivers, verify the database file exists before attempting connection
-    if drv.manifest().capabilities.file_based {
-        let db_path = if resolved_params.driver == "sqlite" {
-            crate::sqlite_database::expand_sqlite_filename(resolved_params.database.primary())
-        } else {
-            PathBuf::from(resolved_params.database.primary())
-        };
-        if !db_path.exists() {
-            let err = format!("Database file not found: {}", resolved_params.database);
-            return Err(emit_test_failure(&app, progress_id, "dbConnect", err));
-        }
-    }
-
-    drv.test_connection(&resolved_params).await.map_err(|e| {
-        log::warn!(
-            "Connection test failed for database {}: {e}",
-            request.params.database
-        );
-        emit_test_failure(&app, progress_id, "dbConnect", e)
-    })?;
+    crate::services::test_driver_connection(drv.as_ref(), &resolved_params)
+        .await
+        .map_err(|e| {
+            log::warn!(
+                "Connection test failed for database {}: {e}",
+                request.params.database
+            );
+            emit_test_failure(&app, progress_id, "dbConnect", e)
+        })?;
 
     emit_test_progress(&app, progress_id, "dbConnect", "ok", None);
     log::info!(
@@ -2640,7 +2437,9 @@ mod tests {
             detect_json_in_text_columns: None,
             appearance: Some(ConnectionAppearance {
                 accent_color: Some("#ff0000".to_string()),
-                icon: Some(IconOverride::Emoji { value: "🐘".to_string() }),
+                icon: Some(IconOverride::Emoji {
+                    value: "🐘".to_string(),
+                }),
             }),
             tag_ids: None,
             environment: None,
@@ -2661,13 +2460,19 @@ mod tests {
             environment: None,
         };
 
-        let app = updated.appearance.as_ref().expect("appearance must be preserved");
+        let app = updated
+            .appearance
+            .as_ref()
+            .expect("appearance must be preserved");
         assert_eq!(app.accent_color.as_deref(), Some("#ff0000"));
         assert!(matches!(&app.icon, Some(IconOverride::Emoji { value }) if value == "🐘"));
     }
 
     /// Helper: build a minimal ConnectionsFile with one connection.
-    fn one_conn_file(id: &str, appearance: Option<crate::models::ConnectionAppearance>) -> ConnectionsFile {
+    fn one_conn_file(
+        id: &str,
+        appearance: Option<crate::models::ConnectionAppearance>,
+    ) -> ConnectionsFile {
         let conn = SavedConnection {
             id: id.to_string(),
             name: "Test".to_string(),
@@ -2693,12 +2498,17 @@ mod tests {
         let mut file = one_conn_file("conn-1", None);
         let new_appearance = ConnectionAppearance {
             accent_color: Some("#00ff00".to_string()),
-            icon: Some(IconOverride::Emoji { value: "🦀".to_string() }),
+            icon: Some(IconOverride::Emoji {
+                value: "🦀".to_string(),
+            }),
         };
 
         set_appearance_impl(&mut file, "conn-1", Some(new_appearance)).unwrap();
 
-        let app = file.connections[0].appearance.as_ref().expect("appearance must be set");
+        let app = file.connections[0]
+            .appearance
+            .as_ref()
+            .expect("appearance must be set");
         assert_eq!(app.accent_color.as_deref(), Some("#00ff00"));
         assert!(matches!(&app.icon, Some(IconOverride::Emoji { value }) if value == "🦀"));
     }
@@ -2709,7 +2519,9 @@ mod tests {
 
         let existing_appearance = ConnectionAppearance {
             accent_color: Some("#ff0000".to_string()),
-            icon: Some(IconOverride::Pack { id: "server".to_string() }),
+            icon: Some(IconOverride::Pack {
+                id: "server".to_string(),
+            }),
         };
         let mut file = one_conn_file("conn-2", Some(existing_appearance));
 
@@ -3002,10 +2814,7 @@ mod tests {
     mod apply_inline_ssh_secret_fallback_tests {
         use super::*;
 
-        fn params_with_ssh(
-            password: Option<&str>,
-            passphrase: Option<&str>,
-        ) -> ConnectionParams {
+        fn params_with_ssh(password: Option<&str>, passphrase: Option<&str>) -> ConnectionParams {
             ConnectionParams {
                 ssh_password: password.map(|p| p.to_string()),
                 ssh_key_passphrase: passphrase.map(|p| p.to_string()),
@@ -3016,8 +2825,7 @@ mod tests {
         #[test]
         fn fills_both_secrets_from_saved_params() {
             let params = params_with_ssh(Some("pwd"), Some("phrase"));
-            let (password, passphrase) =
-                apply_inline_ssh_secret_fallback(None, None, &params);
+            let (password, passphrase) = apply_inline_ssh_secret_fallback(None, None, &params);
             assert_eq!(password, Some("pwd".to_string()));
             assert_eq!(passphrase, Some("phrase".to_string()));
         }
@@ -3037,8 +2845,7 @@ mod tests {
         #[test]
         fn blank_saved_secrets_are_ignored() {
             let params = params_with_ssh(Some("   "), Some(""));
-            let (password, passphrase) =
-                apply_inline_ssh_secret_fallback(None, None, &params);
+            let (password, passphrase) = apply_inline_ssh_secret_fallback(None, None, &params);
             assert_eq!(password, None);
             assert_eq!(passphrase, None);
         }
@@ -3046,11 +2853,8 @@ mod tests {
         #[test]
         fn fills_only_missing_secret() {
             let params = params_with_ssh(Some("saved_pwd"), Some("saved_phrase"));
-            let (password, passphrase) = apply_inline_ssh_secret_fallback(
-                Some("request_pwd".to_string()),
-                None,
-                &params,
-            );
+            let (password, passphrase) =
+                apply_inline_ssh_secret_fallback(Some("request_pwd".to_string()), None, &params);
             assert_eq!(password, Some("request_pwd".to_string()));
             assert_eq!(passphrase, Some("saved_phrase".to_string()));
         }
@@ -3280,6 +3084,26 @@ mod tests {
         }
     }
 
+    mod query_normalization {
+        use super::super::sanitize_user_query;
+
+        #[test]
+        fn preserves_existing_query_cleanup_behavior() {
+            assert_eq!(
+                sanitize_user_query("  SELECT \u{2018}value\u{2019}, \u{201C}column\u{201D};;;  "),
+                "SELECT 'value', \"column\""
+            );
+        }
+
+        #[test]
+        fn leaves_internal_semicolons_untouched() {
+            assert_eq!(
+                sanitize_user_query("SELECT 1; SELECT 2;"),
+                "SELECT 1; SELECT 2"
+            );
+        }
+    }
+
     mod cancellation_state {
         use super::super::{
             cancel_query_impl, register_abort_handle, unregister_abort_handle,
@@ -3359,7 +3183,9 @@ mod tests {
 
             {
                 let remaining = state.handles.lock().unwrap();
-                let slot = remaining.get("conn-1").expect("slot kept while B in flight");
+                let slot = remaining
+                    .get("conn-1")
+                    .expect("slot kept while B in flight");
                 assert_eq!(slot.len(), 1);
                 assert!(Arc::ptr_eq(&slot[0], &handle_b));
             }
@@ -3535,7 +3361,10 @@ mod tests {
             group("drop", Some("root")),
         ];
         let subtree = crate::models::collect_group_subtree(&groups, "drop");
-        assert_eq!(subtree, std::collections::HashSet::from(["drop".to_string()]));
+        assert_eq!(
+            subtree,
+            std::collections::HashSet::from(["drop".to_string()])
+        );
         assert!(!subtree.contains("root"));
         assert!(!subtree.contains("keep"));
     }
@@ -3544,7 +3373,10 @@ mod tests {
     fn collect_group_subtree_for_unknown_id_is_singleton() {
         let groups = vec![group("a", None)];
         let subtree = crate::models::collect_group_subtree(&groups, "missing");
-        assert_eq!(subtree, std::collections::HashSet::from(["missing".to_string()]));
+        assert_eq!(
+            subtree,
+            std::collections::HashSet::from(["missing".to_string()])
+        );
     }
 
     #[test]
@@ -3700,7 +3532,8 @@ pub async fn get_tables<R: Runtime>(
     );
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    let result = drv.get_tables(&params, schema.as_deref()).await;
+    let result =
+        crate::services::discover_tables(drv.as_ref(), &params, connection_id, schema).await;
 
     match &result {
         Ok(tables) => log::info!("Retrieved {} tables from {}", tables.len(), params.database),
@@ -3868,13 +3701,7 @@ pub async fn fetch_blob_as_data_url<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
     let drv = driver_for(&saved_conn.params.driver).await?;
     let wire = drv
-        .fetch_blob_as_data_url(
-            &params,
-            &table,
-            &col_name,
-            &pk_map,
-            schema.as_deref(),
-        )
+        .fetch_blob_as_data_url(&params, &table, &col_name, &pk_map, schema.as_deref())
         .await?;
     // Convert the BLOB wire format to a data: URL
     // wire format: "BLOB:<size>:<mime>:<base64>"
@@ -4092,7 +3919,9 @@ pub async fn cancel_query(
     state: State<'_, QueryCancellationState>,
     connection_id: String,
 ) -> Result<(), String> {
-    cancel_query_impl(&state, &connection_id)
+    QueryService
+        .cancel(&*state, &connection_id)
+        .map_err(|error| error.to_string())
 }
 
 /// Payload for the `database-dropped` event, emitted after a `DROP DATABASE`
@@ -4145,27 +3974,28 @@ pub async fn execute_query<R: Runtime>(
         query
     );
 
-    let sanitized_query = sanitize_user_query(&query);
+    let query_scope = QueryService
+        .prepare(QueryExecutionInput {
+            connection_id: connection_id.clone(),
+            query,
+            limit,
+            page,
+            schema,
+        })
+        .map_err(|error| error.to_string())?;
 
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
-    // Detected before the spawn, which takes ownership of `sanitized_query`.
+    // Detected before the spawn, which takes ownership of `query_scope`.
     // Cheap: only allocates when the statement really is a DROP DATABASE.
-    let dropped = crate::sql_database_statements::dropped_database(&sanitized_query);
+    let dropped = crate::sql_database_statements::dropped_database(&query_scope.query);
 
     let drv = driver_for(&saved_conn.params.driver).await?;
     let task = tokio::spawn(async move {
-        drv.execute_query(
-            &params,
-            &sanitized_query,
-            limit,
-            page.unwrap_or(1),
-            schema.as_deref(),
-        )
-        .await
+        crate::services::execute_prepared_query(drv.as_ref(), &params, &query_scope).await
     });
 
     let abort_handle = Arc::new(task.abort_handle());
@@ -4700,7 +4530,8 @@ pub async fn get_views<R: Runtime>(
     );
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    let result = drv.get_views(&params, schema.as_deref()).await;
+    let result =
+        crate::services::discover_views(drv.as_ref(), &params, connection_id, schema, false).await;
 
     match &result {
         Ok(views) => log::info!("Retrieved {} views from {}", views.len(), params.database),
@@ -4871,7 +4702,10 @@ pub async fn get_materialized_views<R: Runtime>(
     connection_id: String,
     schema: Option<String>,
 ) -> Result<Vec<crate::models::ViewInfo>, String> {
-    log::info!("Fetching materialized views for connection: {}", connection_id);
+    log::info!(
+        "Fetching materialized views for connection: {}",
+        connection_id
+    );
 
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
@@ -4879,7 +4713,8 @@ pub async fn get_materialized_views<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    let result = drv.get_materialized_views(&params, schema.as_deref()).await;
+    let result =
+        crate::services::discover_views(drv.as_ref(), &params, connection_id, schema, true).await;
 
     match &result {
         Ok(views) => log::info!(
@@ -5019,7 +4854,8 @@ pub async fn get_triggers<R: Runtime>(
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
 
     let drv = driver_for(&saved_conn.params.driver).await?;
-    let result = drv.get_triggers(&params, schema.as_deref()).await;
+    let result =
+        crate::services::discover_triggers(drv.as_ref(), &params, connection_id, schema).await;
 
     match &result {
         Ok(triggers) => log::info!("Retrieved {} triggers", triggers.len()),
@@ -5206,7 +5042,9 @@ pub async fn set_db_user_password<R: Runtime>(
 ) -> Result<(), String> {
     log::info!("Changing password for database user '{user}'@'{host}'");
     let (drv, params) = user_mgmt_context(&app, &connection_id).await?;
-    let result = drv.set_db_user_password(&params, &user, &host, &password).await;
+    let result = drv
+        .set_db_user_password(&params, &user, &host, &password)
+        .await;
     if let Err(e) = &result {
         log::error!("Failed to change password for '{user}'@'{host}': {e}");
     }
@@ -5739,7 +5577,10 @@ pub(crate) fn reject_if_would_create_cycle(
             None => return Ok(()),
         }
     }
-    Err("Connection-group tree is deeper than the number of groups; refusing to modify it".to_string())
+    Err(
+        "Connection-group tree is deeper than the number of groups; refusing to modify it"
+            .to_string(),
+    )
 }
 
 #[tauri::command]
@@ -5763,8 +5604,11 @@ pub async fn delete_connection_group<R: Runtime>(
     let to_delete = crate::models::collect_group_subtree(&file.groups, &id);
 
     file.groups.retain(|g| !to_delete.contains(&g.id));
-    file.connections
-        .retain(|c| !c.group_id.as_ref().is_some_and(|gid| to_delete.contains(gid)));
+    file.connections.retain(|c| {
+        !c.group_id
+            .as_ref()
+            .is_some_and(|gid| to_delete.contains(gid))
+    });
 
     save_connections_and_invalidate(&app, &path, &file)?;
 
@@ -5887,8 +5731,7 @@ pub async fn export_connections_payload<R: Runtime>(
     // before password resolution so unselected credentials never leave the
     // keychain.
     if let Some(ids) = &connection_ids {
-        let selected: std::collections::HashSet<&str> =
-            ids.iter().map(String::as_str).collect();
+        let selected: std::collections::HashSet<&str> = ids.iter().map(String::as_str).collect();
         conn_file
             .connections
             .retain(|c| selected.contains(c.id.as_str()));

@@ -1,4 +1,4 @@
-use crate::ai_activity::{self, AiActivityEvent};
+use crate::ai_activity;
 use crate::ai_approval::{self, PendingApproval, PollOutcome};
 use crate::commands;
 use crate::config::{
@@ -759,7 +759,7 @@ fn emit_audit(
     start: std::time::Instant,
     max_entries: usize,
 ) {
-    let event = AiActivityEvent {
+    let event = crate::services::McpAuditRecord {
         id: ai_activity::new_uuid(),
         session_id: session_id.to_string(),
         timestamp: ai_activity::now_iso8601(),
@@ -775,7 +775,7 @@ fn emit_audit(
         client_hint: client_hint.clone(),
         approval_id: audit.approval_id.clone(),
     };
-    if let Err(e) = ai_activity::append_and_rotate(&event, max_entries) {
+    if let Err(e) = crate::services::record_mcp_audit(event, max_entries) {
         eprintln!("[MCP] Failed to write audit log: {}", e);
     }
 }
@@ -1210,4 +1210,3 @@ async fn tool_run_query(
         }]
     }))
 }
-
