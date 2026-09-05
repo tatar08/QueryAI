@@ -1,0 +1,256 @@
+command,status,evidence,justification,dynamic
+add_query_history_entry,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+alter_view,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+analyze_ai_explain_plan,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+apply_connection_import,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+apply_db_user_privileges,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+apply_tabularis_import,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+build_routine_call_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+cancel_dump,deferred,,Not yet served over HTTP. Planned substitute: WS control msg + server job token,no
+cancel_export,deferred,,Not yet served over HTTP. Planned substitute: WS control msg + server job token,no
+cancel_import,deferred,,Not yet served over HTTP. Planned substitute: WS control msg + server job token,no
+cancel_plugin_install,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+cancel_query,deferred,,Not yet served over HTTP. Planned substitute: WS control msg + server job token,no
+check_ai_key,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+check_ai_key_status,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+check_for_updates,dropped,,Drop — server-side deploy + in-app version banner,no
+clear_ai_activity,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+clear_ai_models_cache,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+clear_logs,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+clear_query_history,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+close_devtools,dropped,,Drop — browser has native devtools,no
+close_results_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+complete_json_viewer_session,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+consume_pending_deep_link_install,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+count_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_connection_group,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_connection_tag,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_db_user,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_group_path,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+create_notebook,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_sqlite_database,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_sqlite_file,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+create_trigger,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+create_view,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+decide_pending_approval,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+decrypt_export_payload,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+delete_ai_key,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_connection_group,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_connection_icon,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_connection_tag,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_custom_theme,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_editor_preferences,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_k8s_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+delete_notebook,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_query_history_entry,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_record,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_saved_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+delete_ssh_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+detect_blob_mime,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+detect_mime_type,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+disable_plugin,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+disconnect_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+download_and_install_update,dropped,,Drop — server-side deploy + in-app version banner,no
+drop_db_user,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+drop_foreign_key_action,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+drop_index_action,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+drop_routine,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+drop_trigger,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+drop_view,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+dump_database,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+duplicate_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+enable_plugin,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+encrypt_export_payload,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+execute_clipboard_import,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+execute_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+execute_query_batch,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+explain_ai_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+explain_query_plan,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+export_ai_activity_csv,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_ai_activity_json,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_ai_session_as_notebook,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_connections_payload,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_logs,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_query_to_file,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+export_theme,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+fetch_blob_as_data_url,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+fetch_plugin_readme,deferred,,Not yet served over HTTP. Planned substitute: Direct endpoint; proxied through server,no
+fetch_plugin_registry,deferred,,Not yet served over HTTP. Planned substitute: Direct endpoint; proxied through server,no
+fetch_tabularium_plugin_preview,deferred,,Not yet served over HTTP. Planned substitute: Direct endpoint; proxied through server,no
+generate_ai_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+generate_cell_name,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+generate_tab_rename,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_active_connections,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_add_column_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_ai_activity,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+get_ai_models,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_ai_schema_context,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_ai_session_events,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_ai_sessions,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_all_themes,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_alter_column_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_available_databases,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_cellname_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_columns,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_config,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_config_json,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_connection_by_id,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_connection_groups,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_connections,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_connections_backup_status,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+get_connections_with_groups,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_create_foreign_key_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_create_index_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_create_table_sql,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_data_types,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_db_privilege_catalog,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+get_db_user_grants,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_db_user_privileges,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_db_users,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_driver_manifest,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_explain_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_explainplan_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_file_stats,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+get_foreign_keys,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_indexes,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_installation_source,dropped,,Drop — server-side deploy + in-app version banner,no
+get_installed_plugins,deferred,,Not yet served over HTTP. Planned substitute: Direct endpoint; proxied through server,no
+get_json_viewer_session,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+get_k8s_connections,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_k8s_contexts_cmd,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_k8s_namespaces_cmd,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_k8s_resource_ports_cmd,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_k8s_resources_cmd,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_keybindings,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_last_active_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_last_open_connections,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_log_settings,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+get_logs,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+get_materialized_view_columns,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_materialized_view_definition,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_materialized_views,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_mcp_status,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+get_pending_explain_file,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+get_plugin_dir,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+get_plugin_manifest,deferred,,Not yet served over HTTP. Planned substitute: Direct endpoint; proxied through server,no
+get_plugin_startup_errors,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+get_process_list,deferred,,"Not yet served over HTTP. Planned substitute: Server-side metrics scoped to session, or drop",no
+get_query_history,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_registered_drivers,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_routine_create_template,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_routine_definition,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_routine_edit_script,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_routine_parameters,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_routines,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_saved_queries,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_schema_preference,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_schema_snapshot,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_schemas,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_selected_schemas,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_server_now,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_ssh_connections,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+get_system_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_system_stats,deferred,,"Not yet served over HTTP. Planned substitute: Server-side metrics scoped to session, or drop",no
+get_tables,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_tabrename_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_tabularis_children,deferred,,"Not yet served over HTTP. Planned substitute: Server-side metrics scoped to session, or drop",no
+get_theme,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_trigger_definition,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_triggers,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_view_columns,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_view_definition,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+get_views,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+import_connections_payload,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+import_database,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+import_theme,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+insert_record,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+install_mcp_config,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+install_plugin,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+is_debug_mode,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+kill_plugin_process,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+list_all_preferences,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+list_connection_import_sources,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+list_connection_tags,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+list_databases,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+list_notebooks,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+list_pending_approvals,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+load_blob_from_file,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+load_editor_preferences,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+load_explain_from_file,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+load_notebook,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+log_frontend_event,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+map_inferred_column_types,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+move_connection_to_group,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+move_group_to_parent,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+open_connection_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+open_devtools,dropped,,Drop — browser has native devtools,no
+open_er_diagram_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+open_json_viewer_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+open_plugins_dir,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+open_results_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+open_task_manager_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+open_visual_explain_window,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+preview_connection_import,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+preview_tabularis_import,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+read_file_as_data_url,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+read_plugin_file,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+refresh_materialized_view,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+register_active_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+relaunch_app,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+rename_notebook,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+reorder_connections_in_group,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+reorder_groups,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+reset_cellname_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+reset_explain_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+reset_explainplan_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+reset_system_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+reset_tabrename_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+respond_ssh_askpass,deferred,,Not yet served over HTTP. Planned substitute: Server-side tunnel pool; askpass via WS prompt round-trip,no
+restart_plugin_process,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+run_connections_backup,deferred,,Not yet served over HTTP. Planned substitute: HTTP streaming download / multipart upload; WS progress,no
+save_blob_to_file,deferred,,Not yet served over HTTP. Planned substitute: Sandboxed server workspace; no arbitrary FS,no
+save_cellname_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+save_config,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_config_json,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_connection_icon,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_custom_theme,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_editor_preferences,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_explain_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+save_explainplan_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+save_k8s_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+save_keybindings,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_notebook,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+save_ssh_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+save_system_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+save_tabrename_prompt,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,yes
+set_ai_key,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_connection_appearance,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_connection_tags,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_connections_backup_password,deferred,,Not yet served over HTTP. Planned substitute: Server-side encrypted secret store keyed to session,no
+set_connections_backup_target_password,deferred,,Not yet served over HTTP. Planned substitute: Server-side encrypted secret store keyed to session,no
+set_db_user_password,deferred,,Not yet served over HTTP. Planned substitute: Server-side encrypted secret store keyed to session,no
+set_last_active_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_last_open_connections,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_log_enabled,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+set_log_max_size,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+set_schema_preference,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_selected_databases,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_selected_schemas,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+set_window_title,deferred,,Not yet served over HTTP. Planned substitute: In-app panel/route or browser popup; BroadcastChannel for cross-tab sync,no
+suggest_table_name,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+test_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+test_k8s_connection_cmd,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+test_log,deferred,,Not yet served over HTTP. Planned substitute: Server log API scoped to session,no
+test_ssh_connection,deferred,,Not yet served over HTTP. Planned substitute: Server-side tunnel pool; askpass via WS prompt round-trip,no
+uninstall_plugin,deferred,,"Not yet served over HTTP. Planned substitute: Server-side plugin host, admin-gated; per-user sandbox",no
+update_connection,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+update_connection_group,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+update_connection_tag,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+update_k8s_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+update_record,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+update_saved_query,deferred,,Not yet served over HTTP. Planned substitute: Direct HTTP endpoint,no
+update_ssh_connection,deferred,,Not yet served over HTTP. Planned substitute: Normal endpoint; secrets move to server secret store,no
+validate_k8s_path_cmd,deferred,,Not yet served over HTTP. Planned substitute: Server-side tunnel pool; askpass via WS prompt round-trip,no

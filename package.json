@@ -28,6 +28,7 @@
     "check:plugin-api": "pnpm --filter @tabularis/plugin-api check:sync",
     "build:create-plugin": "pnpm --filter @tabularis/create-plugin build",
     "smoke:create-plugin": "pnpm --filter @tabularis/create-plugin smoke",
+    "port:status": "node scripts/generate-port-status.mjs",
     "roadmap": "node scripts/update-roadmap.js",
     "sync-links": "node scripts/sync-links.js",
     "sync-sponsors": "node scripts/sync-sponsors.js",
