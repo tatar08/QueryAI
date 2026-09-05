@@ -1,11 +1,18 @@
 # Browser Port — Planning Artifacts
 
 Planning-owned deliverables for replacing Tauri IPC with an API server so Tabularis runs in a browser.
-All figures machine-extracted from commit `9e6975aa`.
+All Round-1 figures machine-extracted from commit `9e6975aa`.
+
+> **Read PLAN-02 first.** Round 2 audited `Improvement plan.md` against the real working tree and found that
+> all 81 items it marks complete are **uncommitted** — 61 source files exist only in one working directory,
+> and the plan file itself is untracked. The Round-1 artifacts below were measured at `9e6975aa`, which
+> contains none of that work, so their step numbering is partly stale. Both must be regenerated once the work
+> is committed. Do not hand PLAN-01 or the execution plan to DEV as a work queue until then.
 
 | Artifact | Contents |
 |---|---|
-| [PLANNING-DELIVERABLE-execution-plan.md](./PLANNING-DELIVERABLE-execution-plan.md) | Architecture, 10 ordered steps, acceptance criteria, testing strategy, handoffs. **Start here.** |
+| [PLAN-02-plan-audit.md](./PLAN-02-plan-audit.md) | Audit of `Improvement plan.md`, Gap Register v1 (11 gaps), corrected R0–R5 sequence. **Start here.** |
+| [PLANNING-DELIVERABLE-execution-plan.md](./PLANNING-DELIVERABLE-execution-plan.md) | Architecture, 10 ordered steps, acceptance criteria, testing strategy, handoffs. Steps S1–S4 partly superseded — see PLAN-02 F3. |
 | [PLAN-01-ipc-inventory.md](./PLAN-01-ipc-inventory.md) | Inventory method, headline numbers, defects found, risk classification. |
 | [PLAN-01-parity-matrix.csv](./PLAN-01-parity-matrix.csv) | 255 rows — one per `#[tauri::command]`. The work queue. |
 | [PLAN-01-frontend-native-surface.csv](./PLAN-01-frontend-native-surface.csv) | 8 rows — Tauri JS modules used directly by the frontend, bypassing `invoke`. |
@@ -18,6 +25,12 @@ All figures machine-extracted from commit `9e6975aa`.
 - **~60** additional files use `@tauri-apps/*` plugins directly, never touching `invoke`
 
 ## Three things not to miss
+
+0. **Nothing claimed as done is in git.** `src-core/`, `src-web-server/`, `src/transports/`, `src/platform/`
+   and `src-tauri/src/services/` are all untracked; `DatabaseProvider.tsx`, `lib.rs` and `vite.config.ts` are
+   modified and unstaged. One `git clean -fd` erases Phase 1 and Phase 2. Committing this is gap **A1** and it
+   blocks every other item.
+
 
 1. **The command matrix is not the whole surface.** The dominant export idiom (`save()` → `writeTextFile()`)
    never calls `invoke` — it lives entirely in TypeScript across 35 files. Endpoint-only parity would drop
