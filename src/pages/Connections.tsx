@@ -43,6 +43,7 @@ import { useOpenConnectionInNewWindow } from "../hooks/useOpenConnectionInNewWin
 import { useConnectionTags } from "../hooks/useConnectionTags";
 import { GroupHeader } from "../components/connections/GroupHeader";
 import { ConnectionCard } from "../components/connections/ConnectionCard";
+import { WorkspaceSelector } from "../components/workspace/WorkspaceSelector";
 import { ConnectionListItem } from "../components/connections/ConnectionListItem";
 import { ConnectionErrorBanner } from "../components/ConnectionErrorBanner";
 import { BetaBadge } from "../components/ui/BetaBadge";
@@ -820,15 +821,28 @@ export const Connections = () => {
               }
               style={{ paddingLeft: 24 + indentPx + (depth + 1) * 20 }}
             >
-              {groupConns.map((conn) =>
-                mode === "grid" ? (
-                  <ConnectionCard key={conn.id} {...connCardProps(conn)} />
-                ) : (
-                  <ConnectionListItem
-                    key={conn.id}
-                    {...connCardProps(conn)}
-                  />
-                ),
+              {groupConns.length === 0 ? (
+                <div
+                  className={clsx(
+                    "col-span-full border-2 border-dashed rounded-xl py-3 px-4 text-center text-xs transition-colors",
+                    dragOverGroupId === group.id
+                      ? "border-blue-500/60 bg-blue-500/10 text-blue-400"
+                      : "border-border/30 text-muted/50 hover:border-border/60",
+                  )}
+                >
+                  {t("groups.emptyDropZone", { defaultValue: "Drag connections here" })}
+                </div>
+              ) : (
+                groupConns.map((conn) =>
+                  mode === "grid" ? (
+                    <ConnectionCard key={conn.id} {...connCardProps(conn)} />
+                  ) : (
+                    <ConnectionListItem
+                      key={conn.id}
+                      {...connCardProps(conn)}
+                    />
+                  ),
+                )
               )}
             </div>
           )}
@@ -877,10 +891,12 @@ export const Connections = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-base">
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="relative flex items-center justify-between px-8 pt-7 pb-6 border-b border-default bg-elevated shrink-0 overflow-hidden">
+      <div className="relative flex items-center justify-between px-8 pt-7 pb-6 border-b border-default bg-elevated shrink-0 z-10">
         {/* Decorative gradients */}
-        <div className="absolute top-0 right-0 w-72 h-full bg-gradient-to-bl from-blue-600/10 via-blue-600/3 to-transparent pointer-events-none" />
-        <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-l from-indigo-600/6 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 w-72 h-full bg-gradient-to-bl from-blue-600/10 via-blue-600/3 to-transparent" />
+          <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-l from-indigo-600/6 to-transparent" />
+        </div>
 
         <div className="relative">
           <div className="flex items-center gap-1.5 mb-2">
@@ -912,7 +928,9 @@ export const Connections = () => {
           </div>
         </div>
 
-        <div className="relative flex items-stretch shadow-lg shadow-blue-500/20 rounded-xl">
+        <div className="flex items-center gap-3">
+          <WorkspaceSelector />
+          <div className="relative flex items-stretch shadow-lg shadow-blue-500/20 rounded-xl">
           <button
             onClick={() => {
               setEditingConnection(null);
@@ -977,6 +995,7 @@ export const Connections = () => {
               </>,
               document.body,
             )}
+        </div>
         </div>
       </div>
 

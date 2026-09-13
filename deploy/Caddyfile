@@ -1,0 +1,47 @@
+{
+    # Global options
+    auto_https off
+}
+
+:80 {
+    # Security headers
+    header {
+        # Keep client from sniffing MIME types away from declared Content-Type
+        X-Content-Type-Options "nosniff"
+        # Clickjacking defense
+        X-Frame-Options "DENY"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Permissions policy
+        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+        # Remove Server header to prevent banner leakage
+        -Server
+    }
+
+    # Enable compression
+    encode zstd gzip
+
+    # API & Health routing to backend web server
+    handle /api/* {
+        reverse_proxy web-server:3000 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up Host {host}
+        }
+    }
+
+    handle /health/* {
+        reverse_proxy web-server:3000 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up Host {host}
+        }
+    }
+
+    # Static assets handling
+    handle {
+        root * /srv/dist
+        try_files {path} /index.html
+        file_server
+    }
+}

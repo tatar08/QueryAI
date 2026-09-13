@@ -1,6 +1,7 @@
 import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { devDbProxyPlugin } from './src/tauri-web-shim/devDbProxy'
 
 // Detect if running inside Tauri dev/build environment
 const isTauriBuild = Boolean(
@@ -11,7 +12,7 @@ const isTauriBuild = Boolean(
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), devDbProxyPlugin()],
   resolve: {
     alias: {
       // Polyfills for browser environment (needed by wkx library)

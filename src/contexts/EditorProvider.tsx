@@ -1,3 +1,4 @@
+import { webMode, webScope } from "../utils/webSession";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import type { Tab, SchemaCache, TableSchema, QueryResultEntry } from "../types/editor";
@@ -31,6 +32,7 @@ import {
 
 export const EditorProvider = ({ children }: { children: ReactNode }) => {
   const { activeConnectionId } = useDatabase();
+  const [draftScope] = useState(() => webMode ? webScope() : undefined);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabIds, setActiveTabIds] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -69,7 +71,7 @@ export const EditorProvider = ({ children }: { children: ReactNode }) => {
     const loadPreferences = async () => {
       setIsLoading(true);
       try {
-        const { tabs: loadedTabs, activeTabId: loadedActiveTabId } = await loadEditorPreferences(activeConnectionId);
+        const { tabs: loadedTabs, activeTabId: loadedActiveTabId } = await loadEditorPreferences(activeConnectionId, draftScope);
 
         // Migrate old notebook tabs: notebookState → notebookId
         for (const tab of loadedTabs) {
@@ -128,7 +130,7 @@ export const EditorProvider = ({ children }: { children: ReactNode }) => {
     };
 
     loadPreferences();
-  }, [activeConnectionId]);
+  }, [activeConnectionId, draftScope]);
 
   const createInitialTab = useCallback(
     (partial?: Partial<Tab>): Tab => {
@@ -155,8 +157,8 @@ export const EditorProvider = ({ children }: { children: ReactNode }) => {
     );
     const activeTabId = activeTabIds[activeConnectionId] || null;
 
-    saveTabsToStorage(activeConnectionId, connectionTabs, activeTabId);
-  }, [tabs, activeTabIds, activeConnectionId, isLoading]);
+    saveTabsToStorage(activeConnectionId, connectionTabs, activeTabId, draftScope);
+  }, [tabs, activeTabIds, activeConnectionId, isLoading, draftScope]);
 
   const activeTabId = activeConnectionId
     ? activeTabIds[activeConnectionId] || null

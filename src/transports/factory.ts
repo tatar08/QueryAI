@@ -28,6 +28,7 @@ export function createBackendTransport({
   apiBaseUrl,
   fetchImplementation,
   getCsrfToken,
+  getWorkspaceId,
   invokeCommand,
 }: CreateBackendTransportOptions): BackendTransport {
   if (mode === 'http') {
@@ -35,6 +36,7 @@ export function createBackendTransport({
       baseUrl: apiBaseUrl,
       fetchImplementation,
       getCsrfToken,
+      getWorkspaceId,
     });
   }
   return new TauriTransport(invokeCommand);

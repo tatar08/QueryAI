@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plug2, Settings, Cpu, PanelLeft, Layers, Star, Clock, BookOpen } from "lucide-react";
+import { Plug2, Settings, Cpu, PanelLeft, Layers, Star, Clock, BookOpen, Users, Palette, Database, HardDrive, User, Activity } from "lucide-react";
+import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { DiscordIcon } from "../icons/DiscordIcon";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { DISCORD_URL } from "../../config/links";
@@ -38,11 +39,38 @@ export const Sidebar = () => {
   } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
+  const { setIsTeamModalOpen, activeWorkspace, canAccessMenu } = useWorkspace();
 
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("structure");
   const [showShortcutHints, setShowShortcutHints] = useState(false);
   const { isMac } = useKeybindings();
+
+  const [currentUserInitial, setCurrentUserInitial] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkUser = () => {
+      try {
+        const u = localStorage.getItem("tabularis_web_current_user");
+        if (u) {
+          const parsed = JSON.parse(u);
+          const name = parsed.display_name || parsed.username || "";
+          setCurrentUserInitial(name ? name[0].toUpperCase() : null);
+        } else {
+          setCurrentUserInitial(null);
+        }
+      } catch {
+        setCurrentUserInitial(null);
+      }
+    };
+    checkUser();
+    window.addEventListener("storage", checkUser);
+    window.addEventListener("tabularis:auth-change", checkUser);
+    return () => {
+      window.removeEventListener("storage", checkUser);
+      window.removeEventListener("tabularis:auth-change", checkUser);
+    };
+  }, []);
 
   useEffect(() => {
     const handler = () => setIsExplorerCollapsed((prev) => !prev);
@@ -223,7 +251,8 @@ export const Sidebar = () => {
     !!explorerConnId &&
     location.pathname !== "/settings" &&
     location.pathname !== "/mcp" &&
-    location.pathname !== "/connections";
+    location.pathname !== "/connections" &&
+    !location.pathname.startsWith("/monitor");
 
   return (
     <div className="flex h-full">
@@ -243,12 +272,14 @@ export const Sidebar = () => {
         </div>
 
         <nav className="flex-1 w-full flex flex-col items-center">
-          <NavItem
-            to="/connections"
-            icon={Plug2}
-            label={t("sidebar.connections")}
-            isConnected={!!activeConnectionId}
-          />
+          {canAccessMenu("connections") && (
+            <NavItem
+              to="/connections"
+              icon={Plug2}
+              label={t("sidebar.connections")}
+              isConnected={!!activeConnectionId}
+            />
+          )}
 
           {/* Open connections */}
           {openConnections.length > 0 && (
@@ -299,33 +330,132 @@ export const Sidebar = () => {
         </nav>
 
         <div className="mt-auto">
-          <div className="relative mb-2">
+          {canAccessMenu("monitor") && (
+            <NavItem
+              to="/monitor"
+              icon={Activity}
+              label="Monitor & Tools"
+            />
+          )}
+
+          {canAccessMenu("discord") && (
+            <div className="relative mb-2">
+              <button
+                onClick={() => openUrl(DISCORD_URL)}
+                className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors relative group text-secondary hover:bg-surface-secondary hover:text-indigo-400"
+              >
+                <RailIndicator isActive={false} className="-left-2" />
+                <div className="relative">
+                  <DiscordIcon size={24} />
+                </div>
+                <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
+                  Discord
+                </span>
+              </button>
+              <DiscordCommunityCallout />
+            </div>
+          )}
+
+          {canAccessMenu("mcp") && (
+            <NavItem
+              to="/mcp"
+              icon={Cpu}
+              label={t("sidebar.mcpServer")}
+            />
+          )}
+
+          {canAccessMenu("team") && (
             <button
-              onClick={() => openUrl(DISCORD_URL)}
-              className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors relative group text-secondary hover:bg-surface-secondary hover:text-indigo-400"
+              onClick={() => setIsTeamModalOpen(true)}
+              className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors mb-2 relative group text-secondary hover:bg-surface-secondary hover:text-blue-400"
+              title={t("team.title", { defaultValue: "Team Collaboration" })}
             >
-              <RailIndicator isActive={false} className="-left-2" />
-              <div className="relative">
-                <DiscordIcon size={24} />
-              </div>
+              <Users size={20} />
               <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
-                Discord
+                {activeWorkspace?.name ? `${t("team.title", { defaultValue: "Team" })} (${activeWorkspace.name})` : t("team.title", { defaultValue: "Team Collaboration" })}
               </span>
             </button>
-            <DiscordCommunityCallout />
-          </div>
+          )}
 
-          <NavItem
-            to="/mcp"
-            icon={Cpu}
-            label={t("sidebar.mcpServer")}
-          />
+          {canAccessMenu("design_system") && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("open-design-system"))}
+              className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors mb-2 relative group text-secondary hover:bg-surface-secondary hover:text-purple-400"
+              title="UI Design System & Visual Identity"
+            >
+              <Palette size={20} />
+              <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
+                UI Design System (#195)
+              </span>
+            </button>
+          )}
 
-          <NavItem
-            to="/settings"
-            icon={Settings}
-            label={t("sidebar.settings")}
-          />
+          {canAccessMenu("postgres_tools") && (
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("open-postgres-tools"));
+                window.dispatchEvent(new CustomEvent("app:open-postgres-tools"));
+              }}
+              className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors mb-2 relative group text-secondary hover:bg-surface-secondary hover:text-sky-400"
+              title="PostgreSQL Tools & Activity"
+              data-testid="postgres-tools-btn"
+            >
+              <Database size={20} />
+              <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
+                PostgreSQL Tools (#16)
+              </span>
+            </button>
+          )}
+
+          {canAccessMenu("sqlite_tools") && (
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("open-sqlite-tools"));
+                window.dispatchEvent(new CustomEvent("app:open-sqlite-tools"));
+              }}
+              className="flex items-center justify-center w-12 h-12 rounded-lg transition-colors mb-2 relative group text-secondary hover:bg-surface-secondary hover:text-emerald-400"
+              title="SQLite Tools & Diagnostics"
+              data-testid="sqlite-tools-btn"
+            >
+              <HardDrive size={20} />
+              <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
+                SQLite Tools (#17)
+              </span>
+            </button>
+          )}
+
+          {/* Divider between tools and profile/settings */}
+          <div className="w-8 h-px bg-default/70 my-1.5 mx-auto" />
+
+          <button
+            onClick={() => navigate("/settings?tab=profile")}
+            className={`flex items-center justify-center w-12 h-12 rounded-lg transition-colors mb-2 relative group ${
+              location.pathname === "/settings" && (location.search.includes("tab=profile") || !location.search.includes("tab="))
+                ? "bg-surface-secondary text-primary"
+                : "text-secondary hover:bg-surface-secondary hover:text-primary"
+            }`}
+            title="User Profile"
+            data-testid="user-profile-btn"
+          >
+            {currentUserInitial ? (
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                {currentUserInitial}
+              </div>
+            ) : (
+              <User size={20} />
+            )}
+            <span className="absolute left-14 bg-surface-secondary text-primary text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 pointer-events-none">
+              User Profile
+            </span>
+          </button>
+
+          {canAccessMenu("settings") && (
+            <NavItem
+              to="/settings"
+              icon={Settings}
+              label={t("sidebar.settings")}
+            />
+          )}
 
           <SlotAnchor
             name="sidebar.footer.actions"

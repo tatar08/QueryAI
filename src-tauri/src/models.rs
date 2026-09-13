@@ -314,6 +314,9 @@ pub struct SavedConnection {
     /// write-confirmation warning and the visual identity in the UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<String>,
+    /// When true, strictly blocks all mutating queries and data edits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
 }
 
 /// A user-defined colored label. Tags are purely organizational: a
@@ -668,6 +671,66 @@ pub struct DataTypeRegistry {
     pub driver: String,
     pub types: Vec<DataTypeInfo>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PgActivityInfo {
+    pub pid: i32,
+    pub usename: String,
+    pub datname: String,
+    pub client_addr: String,
+    pub state: String,
+    pub query: String,
+    pub wait_event_type: String,
+    pub wait_event: String,
+    pub duration_seconds: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PgExtensionInfo {
+    pub name: String,
+    pub default_version: String,
+    pub installed_version: String,
+    pub comment: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PgDatabaseMetrics {
+    pub database_size: String,
+    pub active_connections: i64,
+    pub idle_connections: i64,
+    pub total_connections: i64,
+    pub cache_hit_ratio: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlitePragmaInfo {
+    pub journal_mode: String,
+    pub synchronous: String,
+    pub foreign_keys: bool,
+    pub auto_vacuum: String,
+    pub cache_size: i64,
+    pub page_size: i64,
+    pub page_count: i64,
+    pub freelist_count: i64,
+    pub encoding: String,
+    pub user_version: i64,
+    pub wal_autocheckpoint: i64,
+    pub database_size_bytes: i64,
+    pub database_size_pretty: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SqliteAttachedDatabase {
+    pub seq: i32,
+    pub name: String,
+    pub file: String,
+}
+
 
 #[cfg(test)]
 mod appearance_tests {

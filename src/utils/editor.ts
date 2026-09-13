@@ -1,3 +1,4 @@
+import { webMode, webScope } from "./webSession";
 import type {
   Tab,
   SchemaCache,
@@ -26,10 +27,16 @@ export function generateTabId(): string {
 
 export async function loadEditorPreferences(
   connectionId: string | null,
+  draftScope?: string,
 ): Promise<{ tabs: Tab[]; activeTabId: string | null }> {
   if (!connectionId) return { tabs: [], activeTabId: null };
 
   try {
+    if (webMode) {
+      if (!draftScope || draftScope !== webScope()) return { tabs: [], activeTabId: null };
+      const prefs = JSON.parse(localStorage.getItem(`tabularis_web_drafts:${draftScope}:${connectionId}`) || 'null') as EditorPreferences | null;
+      return { tabs: (prefs?.tabs || []).map(restoreTabFromStorage), activeTabId: prefs?.active_tab_id || null };
+    }
     const prefs = await invoke<EditorPreferences | null>(
       "load_editor_preferences",
       { connectionId },
@@ -60,11 +67,17 @@ export async function saveTabsToStorage(
   connectionId: string,
   tabs: Tab[],
   activeTabId: string | null,
+  draftScope?: string,
 ): Promise<void> {
   try {
     // Clean tabs before saving: remove temporary data like results, errors, etc.
     const cleanedTabs = tabs.map(cleanTabForStorage);
 
+    if (webMode) {
+      if (!draftScope || draftScope !== webScope()) return;
+      localStorage.setItem(`tabularis_web_drafts:${draftScope}:${connectionId}`, JSON.stringify({ tabs: cleanedTabs, active_tab_id: activeTabId }));
+      return;
+    }
     await invoke("save_editor_preferences", {
       connectionId,
       preferences: {

@@ -1,3 +1,5 @@
+import { webMode } from "../utils/webSession";
+import { webPostgresDriver } from "../utils/webDriver";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 
@@ -120,6 +122,64 @@ const FALLBACK_DRIVERS: PluginManifest[] = [
       sql_dialect: "sqlite",
     },
   },
+  {
+    id: "mongodb",
+    name: "MongoDB",
+    version: "1.0.0",
+    description: "MongoDB document database",
+    default_port: 27017,
+    is_builtin: true,
+    default_username: "",
+    color: "#10b981",
+    icon: "mongodb",
+    capabilities: {
+      schemas: false,
+      views: false,
+      routines: false,
+      file_based: false,
+      folder_based: false,
+      connection_string: true,
+      connection_string_example: "mongodb://localhost:27017/db",
+      identifier_quote: '"',
+      alter_primary_key: false,
+      auto_increment_keyword: "",
+      serial_type: "",
+      inline_pk: false,
+      alter_column: false,
+      create_foreign_keys: false,
+      supports_ssl: true,
+      connection_uri: true,
+    },
+  },
+  {
+    id: "sqlserver",
+    name: "Microsoft SQL Server",
+    version: "1.0.0",
+    description: "Microsoft SQL Server & Azure SQL Database",
+    default_port: 1433,
+    is_builtin: true,
+    default_username: "sa",
+    color: "#CC292B",
+    icon: "sqlserver",
+    capabilities: {
+      schemas: true,
+      views: true,
+      routines: true,
+      file_based: false,
+      folder_based: false,
+      connection_string: true,
+      connection_string_example: "Server=localhost,1433;Database=master;User Id=sa;Password=secret;TrustServerCertificate=true;",
+      identifier_quote: '"',
+      alter_primary_key: true,
+      auto_increment_keyword: "IDENTITY(1,1)",
+      serial_type: "INT IDENTITY(1,1)",
+      inline_pk: false,
+      alter_column: true,
+      create_foreign_keys: true,
+      supports_ssl: true,
+      sql_dialect: "mssql",
+    },
+  },
 ];
 
 export function useDrivers(): {
@@ -131,7 +191,7 @@ export function useDrivers(): {
   refresh: () => void;
 } {
   const [allDrivers, setAllDrivers] =
-    useState<PluginManifest[]>(FALLBACK_DRIVERS);
+    useState<PluginManifest[]>(webMode ? [webPostgresDriver] : FALLBACK_DRIVERS);
   const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,8 +203,8 @@ export function useDrivers(): {
       invoke<InstalledPluginInfo[]>("get_installed_plugins"),
     ])
       .then(([drivers, installed]) => {
-        setAllDrivers(drivers);
-        setInstalledPlugins(installed);
+        setAllDrivers(Array.isArray(drivers) ? drivers : []);
+        setInstalledPlugins(Array.isArray(installed) ? installed : []);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -162,9 +222,9 @@ export function useDrivers(): {
     load();
   }, [load]);
 
-  const activeExt = settings.activeExternalDrivers || [];
-  const active = allDrivers.filter(
-    (d) => d.is_builtin === true || activeExt.includes(d.id),
+  const activeExt = settings?.activeExternalDrivers || [];
+  const active = (allDrivers || []).filter(
+    (d) => d && (d.is_builtin === true || activeExt.includes(d.id)),
   );
 
   return { drivers: active, allDrivers, installedPlugins, loading, error, refresh };

@@ -33,6 +33,7 @@ mod tests {
                 appearance: None,
                 tag_ids: None,
                 environment: None,
+                read_only: None,
             }],
             ssh_connections: vec![SshConnection {
                 id: "ssh1".to_string(),

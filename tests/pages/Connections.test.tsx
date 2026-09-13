@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   settings: { autoConnectLastConnection: false },
 }));
 
+vi.mock("../../src/components/workspace/WorkspaceSelector", () => ({
+  WorkspaceSelector: () => null,
+}));
+
 vi.mock("lucide-react", () => ({
   AlertCircle: () => null,
   AppWindow: () => null,

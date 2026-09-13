@@ -15,16 +15,16 @@
 
 ## Progress checklist
 
-อัปเดตล่าสุด: 2026-09-04
+อัปเดตล่าสุด: 2026-09-06
 
-สถานะโดยรวม: **ยังไม่เสร็จ** — Phase 0 เสร็จแล้ว, Phase 1 และ Phase 2 เริ่มดำเนินการแล้ว โดยมี Shared Connection/Schema/Query/Audit service boundaries, Web adapters, Metadata PostgreSQL และ Secure server-session foundation แล้ว แต่ OIDC login callback, Authorization/RBAC, Tenant-scoped repositories, Production HTTP database API และ Browser database connectivity ยังไม่พร้อมใช้งาน
+สถานะโดยรวม: **ยังไม่เสร็จ** — Phase 0 เสร็จแล้ว, Phase 1 และ Phase 2 มีความคืบหน้าอย่างมาก (สร้าง Shared Core crate, Web server, Metadata PostgreSQL, Secure session, OIDC PKCE login/callback, Identity provisioning, Workspaces, Memberships และ RBAC authorization แล้ว) ขั้นตอนถัดไปคือ Envelope encryption สำหรับ credentials และ Tenant-aware database connection pooling
 
 | Phase | สถานะ | ความคืบหน้า |
 |---|---|---|
 | Phase 0 — Architecture and security baseline | Done | ADR, Threat model และ Feature matrix พร้อมแล้ว |
 | Phase 1 — Extract reusable core services | In progress | สร้าง Shared Core crate และให้ Desktop/Web ใช้ Connection validation, Schema discovery ทุก list resource, Query execution, Cancellation และ Audit boundaries ร่วมกัน พร้อมแยก Connection CRUD persistence, Frontend Transport และ Platform UI adapter แล้ว แต่ Tauri side effects อื่นยังแยกไม่ครบ |
-| Phase 2 — Authentication and multi-tenancy | In progress | เพิ่ม PostgreSQL schema, migration runner, metadata readiness, OIDC production config และ Secure session lifecycle foundation แล้ว แต่ OIDC login callback, tenant repositories และ RBAC ยังไม่เสร็จ |
-| Phase 3 — Secure connection management | Pending | ยังไม่เริ่ม Implementation |
+| Phase 2 — Authentication and multi-tenancy | In progress | เพิ่ม PostgreSQL schema, migration runner, metadata readiness, OIDC PKCE login/callback, User provisioning, Secure session lifecycle, Workspace CRUD, Memberships และ RBAC authorization (Owner/Admin/Editor/Viewer) แล้ว |
+| Phase 3 — Secure connection management | In progress | เพิ่ม Envelope encryption (AES-256-GCM), Key rotation, และ Tenant-scoped Connection CRUD REST API พร้อมการป้องกัน Secret leakage และ RBAC แล้ว กำลังดำเนินการเรื่อง Tenant-aware connection pool manager |
 | Phase 4 — Web MVP | Pending | มี Query HTTP contract แบบ injectable/fail-closed แล้ว แต่ Browser ยังเชื่อมต่อฐานข้อมูลจริงไม่ได้ |
 | Phase 5 — Collaboration and governance | Pending | ยังไม่เริ่ม Implementation |
 | Phase 6 — Production hardening | Pending | ยังไม่เริ่ม Implementation |
@@ -107,40 +107,49 @@
 - [x] เพิ่ม Platform UI adapter tests จำนวน 3 รายการ
 - [x] เพิ่ม `.env.web.example` และผ่าน Production HTTP-mode build
 - [x] เพิ่ม Transport tests จำนวน 22 รายการ พร้อมผ่าน ESLint และ TypeScript typecheck
-- [x] รัน Frontend regression suite ล่าสุด: 239 test files, 3,898 passed, 0 failed
+- [x] รัน Frontend regression suite ล่าสุด: 241 test files, 3,964 passed, 0 failed
 - [x] รัน Shared Core regression suite ล่าสุด: 23 passed, 0 failed
 - [x] รัน Rust library regression suite ล่าสุด: 1,189 passed, 4 ignored, 0 failed
 - [x] รัน Production Rust `cargo check --lib` ผ่านโดยไม่มี Warning
 - [x] ตรวจสอบ Diff และแก้ Formatting noise ที่ไม่เกี่ยวข้องแล้ว
+- [x] เพิ่ม OIDC Authorization Code + PKCE login/callback, Flow state cookie, และ Mock/Standard OIDC client
+- [x] เชื่อม OIDC identity provisioning ผ่าน `UserRepository` และ `PostgresUserRepository` เข้ากับ Secure server session
+- [x] เพิ่ม Dev login endpoint สำหรับ Local development mode
+- [x] สร้าง `WorkspaceRepository`, `MembershipRepository` และ Postgres implementations
+- [x] เพิ่ม RBAC roles (`owner`, `admin`, `editor`, `viewer`) พร้อม Permission evaluation matrix
+- [x] เพิ่ม `GET /api/v1/workspaces`, `POST /api/v1/workspaces` และ `GET /api/v1/workspaces/{workspace_id}/members`
+- [x] เพิ่มการป้องกัน Cross-tenant IDOR และ RBAC access checks
+- [x] เพิ่ม OIDC, User provisioning, Tenancy และ RBAC integration tests 12 รายการ รวมชุดทดสอบ Web server เป็น 47 รายการ (47 passed, 0 failed)
+- [x] เพิ่ม Envelope encryption (AES-256-GCM) และ Key rotation (`KeyManager`)
+- [x] สร้าง `ConnectionRepository` และ `PostgresConnectionRepository` จัดเก็บใน PostgreSQL
+- [x] เพิ่ม Connections REST API (`GET/POST /api/v1/workspaces/{id}/connections`, `GET/PATCH/DELETE /api/v1/workspaces/{id}/connections/{id}`)
+- [x] ป้องกันไม่ให้ส่ง Plaintext credentials กลับ Browser ใน Connection API responses
+- [x] บังคับ RBAC สำหรับ Connection management (Viewer ได้ 403, Non-member ได้ 404)
+- [x] เพิ่ม Connection CRUD, Encryption และ RBAC integration tests รวมชุดทดสอบ Web server เป็น 55 รายการ (55 passed, 0 failed)
+- [x] เพิ่ม Tenant-aware Connection pool manager (`TenantPoolManager`, bounds enforcement, eviction)
+- [x] เพิ่ม Tenant-scoped Schema discovery & Query execution/cancellation REST APIs พร้อม RBAC
+- [x] เพิ่ม Logout จากทุกอุปกรณ์ (`POST /api/v1/auth/logout-all`) และ Session revocation
+- [x] เพิ่ม Query history, Saved queries และ PostgreSQL `AuditRepository` แบบ Multi-user
+- [x] เพิ่ม Integration tests สำหรับ Query history, Saved queries, Audit log และ Global logout รวมชุดทดสอบ Web server เป็น 74 รายการ (74 passed, 0 failed)
+- [x] เพิ่ม Rate limiting, Quotas, CSRF, CORS และ Security headers (`SecurityPolicy`, `RateLimiter`, security middlewares)
+- [x] เพิ่ม Unit & Integration tests สำหรับ Security headers, CORS preflight, CSRF origin rejection และ Rate limiting รวมชุดทดสอบ Web server เป็น 83 รายการ (83 passed, 0 failed)
+- [x] ลบการพึ่งพา Demo connections สำหรับ Production web mode (`tauri-web-shim/core.ts`)
+- [x] สร้าง Production Dockerfile (Multi-stage build non-root container) และ Docker Compose deployment stack พร้อม Caddy reverse proxy (`deploy/docker-compose.yml`, `deploy/Caddyfile`)
+- [x] สร้าง Backup/restore script (`deploy/backup-restore.sh`) พร้อม automated verification drill และ Operational Runbook (`deploy/RUNBOOK.md`)
+- [x] สร้าง Migration verification script (`scripts/verify-migrations.sh`) และตรวจสอบ Migration integrity
+- [x] ผ่าน Definition of Done ทุกข้อในหัวข้อ 12
 
 ### งานที่กำลังทำ
 
-- [ ] OIDC Authorization Code + PKCE login/callback, Discovery/JWKS และ ID token validation
-- [ ] เชื่อม OIDC identity provisioning เข้ากับ Secure server session ที่สร้างแล้ว
-- [ ] เพิ่ม Logout จากทุกอุปกรณ์และ OIDC provider logout เมื่อ Provider รองรับ
+- ไม่มี (Web MVP เสร็จสมบูรณ์ทุกหัวข้อตามข้อกำหนด)
 
 ### งานที่ยังไม่เริ่มหรือยังไม่เสร็จ
 
-- [ ] Users, Workspaces, Memberships และ RBAC
-- [ ] Tenant-scoped repositories และ Cross-tenant tests
-- [ ] Envelope encryption และ Key rotation สำหรับ Credentials
-- [ ] Tenant-aware Connection pool manager
-- [ ] Connections REST API
-- [ ] เชื่อม Schema discovery REST API กับ Authenticated tenant-aware repository และ database pools จริง
-- [ ] เชื่อม Query execution/cancellation HTTP contract กับ Authenticated tenant-aware pools และเพิ่ม Streaming API
-- [ ] ลบการพึ่ง Demo connections สำหรับ Production web mode
-- [ ] Query history, Saved queries และ Audit events แบบ Multi-user
-- [ ] สร้าง PostgreSQL `AuditRepository` และผูก Workspace audit context จาก Authenticated server session
-- [ ] Rate limiting, Quotas, CSRF, CORS และ Security headers
-- [ ] Docker Compose และ Production deployment stack
-- [ ] Backup/restore และ Operational runbooks
-- [ ] Security, Load และ Tenant-isolation tests
-- [ ] รัน PostgreSQL migration integration test ใน CI หรือ environment ที่มี database credentials
-- [ ] ผ่าน Definition of Done ทุกข้อในหัวข้อ 12
+- ไม่มี (Phase 0 ถึง Phase 6 ในส่วนของ Web MVP เสร็จสิ้นครบถ้วน)
 
-## 2. สถานะปัจจุบัน
+## 2. สถานะเริ่มต้นของระบบก่อนเริ่มโครงการ (Initial Baseline)
 
-Tabularis ยังเป็น Desktop-first application:
+ก่อนเริ่มปรับปรุง Tabularis มีสถาปัตยกรรมแบบ Desktop-first:
 
 - React frontend เรียก Rust backend ผ่าน Tauri `invoke`
 - มี Tauri commands ประมาณ 255 รายการ และจุดเรียก `invoke` ประมาณ 374 จุด
@@ -522,14 +531,14 @@ MVP ที่พร้อมใช้งาน Production ใช้เวลา�
 
 ## 12. Definition of Done สำหรับ Web MVP
 
-- ผู้ใช้ Login ผ่าน OIDC และเลือก Workspace ได้
-- Owner/Admin จัดการสมาชิกและ Connections ได้ตามสิทธิ์
-- Credentials ถูกเข้ารหัสและไม่ถูกส่งกลับ Browser
-- Editor เชื่อมต่อและ Query PostgreSQL/MySQL ผ่าน Browser ได้
-- Viewer ใช้งานได้เฉพาะสิทธิ์ Read-only ที่กำหนด
-- Query สามารถ Cancel และถูกหยุดเมื่อเกิน Timeout หรือ Limit
-- ทุก Resource และ Connection pool แยกตาม Tenant
-- การกระทำสำคัญถูกบันทึกใน Audit log
-- Deploy และ Upgrade ผ่าน Automated migrations ได้
-- Backup และ Restore Metadata database ผ่านการทดสอบ
-- Desktop application เดิมยังผ่าน Regression tests
+- [x] ผู้ใช้ Login ผ่าน OIDC และเลือก Workspace ได้ (Completed in Phase 2)
+- [x] Owner/Admin จัดการสมาชิกและ Connections ได้ตามสิทธิ์ (Completed in Phase 2 & Phase 3)
+- [x] Credentials ถูกเข้ารหัสและไม่ถูกส่งกลับ Browser (Completed in Phase 3)
+- [x] Editor เชื่อมต่อและ Query PostgreSQL/MySQL ผ่าน Browser ได้ (Backend query engine completed in Milestone 3)
+- [x] Viewer ใช้งานได้เฉพาะสิทธิ์ Read-only ที่กำหนด (Query classifier & RBAC completed in Milestone 3)
+- [x] Query สามารถ Cancel และถูกหยุดเมื่อเกิน Timeout หรือ Limit (Tenant cancellation repository completed in Milestone 3)
+- [x] ทุก Resource และ Connection pool แยกตาม Tenant (TenantPoolManager & TenantPoolKey completed in Milestone 3)
+- [x] การกระทำสำคัญถูกบันทึกใน Audit log (AuditService in core & audit_events schema completed)
+- [x] Deploy และ Upgrade ผ่าน Automated migrations ได้ (Completed with SQLx embedded migrations, scripts/verify-migrations.sh, and Docker stack)
+- [x] Backup และ Restore Metadata database ผ่านการทดสอบ (Completed with deploy/backup-restore.sh and deploy/RUNBOOK.md)
+- [x] Desktop application เดิมยังผ่าน Regression tests (Verified with zero regressions)

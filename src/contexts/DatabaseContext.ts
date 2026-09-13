@@ -55,11 +55,17 @@ export interface SavedConnection {
   sort_order?: number;
   /** Per-connection opt-in: detect JSON in plain text columns. */
   detect_json_in_text_columns?: boolean;
+  /** Enforces strict read-only execution: blocks all mutating queries and data edits. */
+  read_only?: boolean;
   appearance?: ConnectionAppearance;
   /** Ids of connection tags attached to this connection. */
   tag_ids?: string[];
   /** Deployment environment; production drives warnings and visuals. */
   environment?: "development" | "staging" | "production";
+  /** Team collaboration: whether this connection is shared with the workspace. */
+  is_shared?: boolean;
+  /** Workspace ID this connection belongs to. */
+  workspace_id?: string;
 }
 
 export interface ConnectionGroup {
@@ -174,6 +180,9 @@ export interface DatabaseContextType {
     connectionId: string,
     options?: { notifyWhenUnchanged?: boolean },
   ) => Promise<void>;
+  switchDatabase: (databaseName: string, connectionId?: string) => Promise<void>;
+  isQuickSwitcherOpen: boolean;
+  setIsQuickSwitcherOpen: (open: boolean) => void;
   getConnectionData: (connectionId: string) => ConnectionData | undefined;
   isConnectionOpen: (connectionId: string) => boolean;
   /** Connection ids open in ANY window (shared backend registry). */

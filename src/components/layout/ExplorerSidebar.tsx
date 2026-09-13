@@ -36,6 +36,7 @@ import {
   Clipboard,
   BookOpen,
   UsersRound,
+  ArrowRightLeft,
 } from "lucide-react";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import { toErrorMessage } from "../../utils/errors";
@@ -59,6 +60,8 @@ import { GenerateSQLModal } from "../modals/GenerateSQLModal";
 import { DumpDatabaseModal } from "../modals/DumpDatabaseModal";
 import { ImportDatabaseModal } from "../modals/ImportDatabaseModal";
 import { ClipboardImportModal } from "../modals/ClipboardImportModal";
+import { DataTransferModal } from "../modals/DataTransferModal";
+import { DataCompareModal } from "../modals/DataCompareModal";
 import { ViewEditorModal } from "../modals/ViewEditorModal";
 import { TriggerEditorModal } from "../modals/TriggerEditorModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
@@ -98,6 +101,7 @@ import {
   getCreateTableRefreshPlan,
   type CreateTableTarget,
 } from "../../utils/createTable";
+import { QuickDatabaseSwitcherModal } from "../modals/QuickDatabaseSwitcherModal";
 
 export type SidebarTab = "structure" | "favorites" | "history" | "notebooks";
 
@@ -148,6 +152,9 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
     connectionDataMap,
     connections,
     connect,
+    switchDatabase,
+    isQuickSwitcherOpen,
+    setIsQuickSwitcherOpen,
   } = useDatabase();
   const { allDrivers } = useDrivers();
   const { tabs, openNotebook, updateTab, closeTab, addTab, setActiveTabId } =
@@ -257,6 +264,16 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
     query?: SavedQuery;
   }>({ isOpen: false });
   const [dumpModal, setDumpModal] = useState<{ database: string } | null>(null);
+  const [dataTransferModal, setDataTransferModal] = useState<{
+    isOpen: boolean;
+    tableName: string;
+    schema?: string;
+  } | null>(null);
+  const [dataCompareModal, setDataCompareModal] = useState<{
+    isOpen: boolean;
+    tableName: string;
+    schema?: string;
+  } | null>(null);
   const [importModal, setImportModal] = useState<{
     filePath: string;
     database: string;
@@ -268,8 +285,51 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
   const [isDbManagerOpen, setIsDbManagerOpen] = useState(false);
   const [pendingDbSelection, setPendingDbSelection] = useState<Set<string>>(new Set());
   const [allAvailableDatabases, setAllAvailableDatabases] = useState<string[]>([]);
+  const [isDatabasesFolderOpen, setIsDatabasesFolderOpen] = useState(true);
   const [isLoadingAllDbs, setIsLoadingAllDbs] = useState(false);
   const [isRefreshingDbList, setIsRefreshingDbList] = useState(false);
+
+  // Auto-fetch all available databases on the active cluster
+  useEffect(() => {
+    if (!activeConnectionId) {
+      setAllAvailableDatabases([]);
+      return;
+    }
+    let isMounted = true;
+    (async () => {
+      try {
+        const dbs = await invoke<string[]>("get_available_databases", {
+          connectionId: activeConnectionId,
+        });
+        if (isMounted && Array.isArray(dbs) && dbs.length > 0) {
+          setAllAvailableDatabases(dbs);
+        }
+      } catch (e) {
+        console.debug("Failed to auto-fetch available databases:", e);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeConnectionId, activeDatabaseName]);
+
+  // Global Command-K / Ctrl-K / Alt-K shortcut for Quick Database Switcher
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+K, Cmd+K, or fallback Alt+K (avoids Chrome browser search bar takeover on Linux/Windows)
+      const isCmdOrCtrlK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+      const isAltK = e.altKey && e.key.toLowerCase() === "k";
+      if (isCmdOrCtrlK || isAltK) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsQuickSwitcherOpen(!isQuickSwitcherOpen);
+      }
+    };
+    // Use capture phase (true) so the event is intercepted before browser default or child handlers
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isQuickSwitcherOpen, setIsQuickSwitcherOpen]);
+
   // Guards against toast spam on rapid repeated clicks: isRefreshingDbList only
   // blocks calls that overlap in flight, so several quick, individually-fast
   // round trips could each complete and each show their own toast. This adds
@@ -505,6 +565,11 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
   };
 
   const isMultiDb = usesMultiDatabaseLayout(activeCapabilities, selectedDatabases);
+  const activeConnection = connections.find((c) => c.id === activeConnectionId);
+  const hostInfo = activeConnection?.params?.host
+    ? `${activeConnection.params.host}${activeConnection.params.port ? `:${activeConnection.params.port}` : ""}`
+    : undefined;
+  const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC");
 
   useEffect(() => {
     if (!activeTable) return;
@@ -573,22 +638,35 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
           </div>
         )}
 
-        <div className="p-4 border-b border-default font-semibold text-sm text-primary flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Database size={16} className="text-blue-400 shrink-0" />
-            <div className="flex flex-col min-w-0">
-              <span>{t("sidebar.explorer")}</span>
-              {activeConnectionName && (
-                <span className="text-xs font-normal text-muted truncate">{activeConnectionName}</span>
-              )}
+        <div className="p-3 border-b border-default font-semibold text-sm text-primary flex flex-col gap-2 bg-surface/30">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20 shrink-0">
+                <Database size={15} />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-xs text-primary truncate">
+                    {activeConnectionName || t("sidebar.explorer")}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2 rounded-full shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Online
+                  </span>
+                </div>
+                {hostInfo && (
+                  <span className="text-[10px] text-muted font-mono truncate">
+                    {activeDriver?.toUpperCase() || "DB"} · {hostInfo}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1">
-            {/* Global actions — hidden in multi-database mode (actions move to each database node) and for API-based plugins */}
-            {!isMultiDb && activeCapabilities?.no_connection_required !== true && (sidebarWidth < 200 ? (
-              <div className="relative">
-                <button
-                  onClick={() => setIsActionsDropdownOpen(!isActionsDropdownOpen)}
+            <div className="flex items-center gap-1">
+              {/* Global actions — hidden in multi-database mode (actions move to each database node) and for API-based plugins */}
+              {!isMultiDb && activeCapabilities?.no_connection_required !== true && (sidebarWidth < 200 ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsActionsDropdownOpen(!isActionsDropdownOpen)}
                   className="text-muted hover:text-secondary transition-colors p-1 hover:bg-surface-secondary rounded"
                   title={t("sidebar.actions")}
                 >
@@ -721,6 +799,31 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
             </button>
           </div>
         </div>
+      </div>
+
+        {/* Quick Switcher Trigger Pill (Option 2) */}
+        {activeDatabaseName && (
+          <div className="px-3 pb-2.5 pt-0.5 border-b border-default bg-surface/30">
+            <button
+              onClick={() => setIsQuickSwitcherOpen(true)}
+              className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg bg-surface-secondary/70 hover:bg-surface-secondary border border-default/80 hover:border-cyan-500/40 text-xs transition-all group shadow-xs cursor-pointer"
+              title={isMac ? "Click or press ⌘K to quickly switch database" : "Click or press Ctrl+K to quickly switch database"}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+                <span className="font-semibold text-cyan-300 group-hover:text-cyan-200 truncate">
+                  {activeDatabaseName}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-muted group-hover:text-secondary shrink-0">
+                <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-base border border-default text-muted font-mono">
+                  {isMac ? "⌘K" : "Ctrl+K"}
+                </kbd>
+                <ChevronDown size={13} />
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex items-center border-b border-default bg-base px-1">
@@ -1017,6 +1120,181 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
                     </div>
                   ) : (
                     <>
+                      {/* Option 1: Modern Neon-Accent DATABASES Folder */}
+                      {allAvailableDatabases.length > 0 && (
+                        <div className="mb-2 pb-2 border-b border-default/60">
+                          <div
+                            className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-surface-secondary/50 rounded transition-colors group select-none"
+                            onClick={() => setIsDatabasesFolderOpen(!isDatabasesFolderOpen)}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {isDatabasesFolderOpen ? (
+                                <ChevronDown size={14} className="text-muted shrink-0" />
+                              ) : (
+                                <ChevronRight size={14} className="text-muted shrink-0" />
+                              )}
+                              <span className="text-xs font-semibold uppercase text-muted tracking-wider group-hover:text-secondary transition-colors truncate">
+                                {t("sidebar.databases")} ({allAvailableDatabases.length})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsQuickSwitcherOpen(true);
+                                }}
+                                className="p-1 rounded text-muted hover:text-cyan-400 hover:bg-surface-secondary transition-colors"
+                                title={isMac ? "Quick Switch Database (⌘K)" : "Quick Switch Database (Ctrl+K)"}
+                              >
+                                <Search size={12} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {isDatabasesFolderOpen && (
+                            <div className="space-y-0.5 mt-0.5">
+                              {/* Database filter if more than 5 databases */}
+                              {allAvailableDatabases.length > 5 && (
+                                <div className="px-3 pb-1 pt-0.5">
+                                  <div className="relative flex items-center">
+                                    <Search size={11} className="absolute left-2 text-muted pointer-events-none" />
+                                    <input
+                                      autoCorrect="off"
+                                      autoCapitalize="off"
+                                      autoComplete="off"
+                                      spellCheck={false}
+                                      type="text"
+                                      value={dbFilter}
+                                      onChange={(e) => setDbFilter(e.target.value)}
+                                      placeholder={t("sidebar.filterDatabases") || "Filter databases..."}
+                                      className="w-full bg-surface-secondary/70 text-xs text-secondary placeholder:text-muted rounded pl-6 pr-6 py-1 border border-default/60 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                    />
+                                    {dbFilter && (
+                                      <button
+                                        onClick={() => setDbFilter("")}
+                                        className="absolute right-1.5 text-muted hover:text-primary"
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Database list items */}
+                              {(dbFilter
+                                ? allAvailableDatabases.filter((d) =>
+                                    d.toLowerCase().includes(dbFilter.toLowerCase())
+                                  )
+                                : allAvailableDatabases
+                              ).map((dbName) => {
+                                const isActive = dbName === activeDatabaseName;
+                                return (
+                                  <SidebarDatabaseItem
+                                    key={dbName}
+                                    databaseName={dbName}
+                                    databaseData={databaseDataMap[dbName]}
+                                    isActive={isActive}
+                                    activeTable={activeTable}
+                                    activeSchema={activeSchema}
+                                    connectionId={activeConnectionId!}
+                                    driver={activeDriver!}
+                                    schemaVersion={schemaVersion}
+                                    onLoadDatabase={loadDatabaseData}
+                                    onRefreshDatabase={refreshDatabaseData}
+                                    onSwitchDatabase={switchDatabase}
+                                    onNewQuery={(db) => {
+                                      runQuery(`-- Query on database: ${db}\nSELECT * FROM `, `${db} Query`);
+                                    }}
+                                    onCompare={() => {
+                                      navigate("/monitor?tab=compare");
+                                    }}
+                                    onTableClick={(name, db) => handleTableClick(name, db)}
+                                    onTableDoubleClick={(name, db) => handleOpenDatabaseTable(name, db)}
+                                    onViewClick={handleViewClick}
+                                    onViewDoubleClick={(name, db) => handleOpenDatabaseView(name, db)}
+                                    onRoutineDoubleClick={(routine, db) => handleRoutineDoubleClick(routine, db)}
+                                    onTriggerDoubleClick={(trigger, db) => handleTriggerDoubleClick(trigger, db)}
+                                    onContextMenu={handleContextMenu}
+                                    onAddColumn={(t_name) =>
+                                      setModifyColumnModal({ isOpen: true, tableName: t_name, column: null })
+                                    }
+                                    onEditColumn={(t_name, c) =>
+                                      setModifyColumnModal({ isOpen: true, tableName: t_name, column: c })
+                                    }
+                                    onAddIndex={(t_name) =>
+                                      setCreateIndexModal({ isOpen: true, tableName: t_name })
+                                    }
+                                    onDropIndex={async (t_name, name) => {
+                                      if (
+                                        await ask(t("sidebar.deleteIndexConfirm", { name }), {
+                                          title: t("sidebar.deleteIndex"),
+                                          kind: "warning",
+                                        })
+                                      ) {
+                                        try {
+                                          await invoke("drop_index_action", {
+                                            connectionId: activeConnectionId,
+                                            table: t_name,
+                                            indexName: name,
+                                            schema: dbName,
+                                          });
+                                          setSchemaVersion((v) => v + 1);
+                                        } catch (e) {
+                                          console.error("Failed to drop index:", e);
+                                        }
+                                      }
+                                    }}
+                                    onAddForeignKey={(t_name) =>
+                                      setCreateForeignKeyModal({ isOpen: true, tableName: t_name })
+                                    }
+                                    onDropForeignKey={async (t_name, fk_name) => {
+                                      if (
+                                        await ask(t("sidebar.deleteFkConfirm", { name: fk_name }), {
+                                          title: t("sidebar.deleteFk"),
+                                          kind: "warning",
+                                        })
+                                      ) {
+                                        try {
+                                          await invoke("drop_foreign_key_action", {
+                                            connectionId: activeConnectionId,
+                                            table: t_name,
+                                            fkName: fk_name,
+                                            schema: dbName,
+                                          });
+                                          setSchemaVersion((v) => v + 1);
+                                        } catch (e) {
+                                          console.error("Failed to drop foreign key:", e);
+                                        }
+                                      }
+                                    }}
+                                    onCreateTable={() => openCreateTableModal({ kind: "database", schema: dbName })}
+                                    onCreateView={() => setViewEditorModal({ isOpen: true, isNewView: true })}
+                                    onCreateTrigger={(schema) =>
+                                      setTriggerEditorModal({ isOpen: true, isNewTrigger: true, schema })
+                                    }
+                                    onDump={(db) => setDumpModal({ database: db })}
+                                    onImport={(db) => handleImportDatabase(db)}
+                                    onViewDiagram={async (db) => {
+                                      try {
+                                        await invoke("open_er_diagram_window", {
+                                          connectionId: activeConnectionId || "",
+                                          connectionName: activeConnectionName || "Unknown",
+                                          databaseName: db,
+                                        });
+                                      } catch (e) {
+                                        console.error("Failed to open ER Diagram window:", e);
+                                      }
+                                    }}
+                                    capabilities={activeCapabilities}
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Schema selection header */}
                       <div className="flex items-center justify-between px-3 py-1.5">
                         <span className="text-xs font-semibold uppercase text-muted tracking-wider">
@@ -1952,6 +2230,30 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
                       action: () => setIsClipboardImportOpen(true),
                     } : null,
                     {
+                      label: t("dataTransfer.contextMenuLabel", "Transfer Data..."),
+                      icon: ArrowRightLeft,
+                      disabled: !activeConnectionId,
+                      action: () => {
+                        setDataTransferModal({
+                          isOpen: true,
+                          tableName: contextMenu.id,
+                          schema: ctxSchema ?? activeSchema ?? undefined,
+                        });
+                      },
+                    },
+                    {
+                      label: t("dataCompare.contextMenuLabel", "Compare Data..."),
+                      icon: ArrowRightLeft,
+                      disabled: !activeConnectionId,
+                      action: () => {
+                        setDataCompareModal({
+                          isOpen: true,
+                          tableName: contextMenu.id,
+                          schema: ctxSchema ?? activeSchema ?? undefined,
+                        });
+                      },
+                    },
+                    {
                       label: t("sidebar.copyName"),
                       icon: Copy,
                       action: () => navigator.clipboard.writeText(contextMenu.id),
@@ -2427,6 +2729,28 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
                                   icon: RefreshCw,
                                   action: () => refreshDatabaseData(contextMenu.id),
                                 },
+                                ...(activeCapabilities?.sql_dialect === "postgres"
+                                  ? [
+                                      {
+                                        label: t("postgresTools.menuItem", "PostgreSQL Tools & Maintenance..."),
+                                        icon: Settings2,
+                                        action: () => {
+                                          window.dispatchEvent(new CustomEvent("app:open-postgres-tools"));
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                                ...(activeCapabilities?.sql_dialect === "sqlite"
+                                  ? [
+                                      {
+                                        label: t("sqliteTools.menuItem", "SQLite Tools & Diagnostics..."),
+                                        icon: Settings2,
+                                        action: () => {
+                                          window.dispatchEvent(new CustomEvent("open-sqlite-tools"));
+                                        },
+                                      },
+                                    ]
+                                  : []),
                               ]
                           : contextMenu.type === "history"
                             ? (() => {
@@ -2622,6 +2946,31 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
         />
       )}
 
+      {dataTransferModal && (
+        <DataTransferModal
+          isOpen={dataTransferModal.isOpen}
+          onClose={() => setDataTransferModal(null)}
+          sourceConnectionId={activeConnectionId}
+          sourceDatabaseName={activeDatabaseName}
+          sourceSchema={dataTransferModal.schema ?? activeSchema}
+          sourceTableName={dataTransferModal.tableName}
+          onSuccess={() => {
+            if (refreshTables) refreshTables();
+          }}
+        />
+      )}
+
+      {dataCompareModal && (
+        <DataCompareModal
+          isOpen={dataCompareModal.isOpen}
+          onClose={() => setDataCompareModal(null)}
+          sourceConnectionId={activeConnectionId}
+          sourceDatabaseName={activeDatabaseName}
+          sourceSchema={dataCompareModal.schema ?? activeSchema}
+          sourceTableName={dataCompareModal.tableName}
+        />
+      )}
+
       {importModal && activeConnectionId && (
         <ImportDatabaseModal
           isOpen={true}
@@ -2727,6 +3076,19 @@ export const ExplorerSidebar = ({ sidebarWidth, startResize, onCollapse, sidebar
         title={t("routines.dropConfirmTitle")}
         message={t("routines.dropConfirmMessage", { name: routineDropConfirm?.name ?? "" })}
         onConfirm={handleDropRoutine}
+      />
+
+      {/* Quick Database Switcher Modal (Option 2 - Raycast Command-K Style) */}
+      <QuickDatabaseSwitcherModal
+        isOpen={isQuickSwitcherOpen}
+        onClose={() => setIsQuickSwitcherOpen(false)}
+        availableDatabases={allAvailableDatabases}
+        activeDatabase={activeDatabaseName}
+        connectionName={activeConnectionName}
+        host={hostInfo}
+        onSelectDatabase={(db) => {
+          void switchDatabase(db);
+        }}
       />
     </>
   );

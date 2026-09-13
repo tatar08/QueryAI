@@ -100,7 +100,7 @@ export function AiTab() {
           "get_ai_models",
           { forceRefresh: force },
         );
-        setAvailableModels(models);
+        setAvailableModels(models || {});
         if (force) {
           showAlert(t("settings.ai.refreshSuccess"), {
             title: t("common.success"),
@@ -459,7 +459,7 @@ export function AiTab() {
                     "border rounded-lg px-3 py-2.5 text-sm flex items-center gap-2",
                     (
                       settings.aiCustomModels?.["ollama"] ||
-                      availableModels["ollama"] ||
+                      availableModels?.["ollama"] ||
                       []
                     ).length > 0
                       ? "bg-green-900/10 border-green-900/20 text-green-400"
@@ -468,7 +468,7 @@ export function AiTab() {
                 >
                   {(
                     settings.aiCustomModels?.["ollama"] ||
-                    availableModels["ollama"] ||
+                    availableModels?.["ollama"] ||
                     []
                   ).length > 0 ? (
                     <>
@@ -477,7 +477,7 @@ export function AiTab() {
                         {t("settings.ai.ollamaConnected", {
                           count: (
                             settings.aiCustomModels?.["ollama"] ||
-                            availableModels["ollama"] ||
+                            availableModels?.["ollama"] ||
                             []
                           ).length,
                         })}
@@ -522,7 +522,7 @@ export function AiTab() {
               {(() => {
                 const currentModels =
                   settings.aiCustomModels?.[settings.aiProvider] ||
-                  availableModels[settings.aiProvider] ||
+                  availableModels?.[settings.aiProvider] ||
                   [];
                 const isModelValid =
                   !settings.aiModel ||

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { X, Loader2, BookOpen } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { X, Loader2, BookOpen, Sparkles } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettings } from "../../hooks/useSettings";
 import { useEditorTheme } from "../../hooks/useEditorTheme";
@@ -13,15 +13,25 @@ interface AiExplainModalProps {
   isOpen: boolean;
   onClose: () => void;
   query: string;
+  onApplyFix?: (fixedSql: string) => void;
 }
 
-export const AiExplainModal = ({ isOpen, onClose, query }: AiExplainModalProps) => {
+export const AiExplainModal = ({ isOpen, onClose, query, onApplyFix }: AiExplainModalProps) => {
   const { settings } = useSettings();
   const editorTheme = useEditorTheme();
   const monacoRef = useRef<typeof MonacoTypes | null>(null);
   const [explanation, setExplanation] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const suggestedSql = useMemo(() => {
+    if (!explanation) return null;
+    const match = explanation.match(/```(?:sql)?([\s\S]*?)```/i);
+    if (match && match[1]?.trim()) {
+      return match[1].trim();
+    }
+    return null;
+  }, [explanation]);
 
   // Update Monaco theme when theme changes
   useEffect(() => {
@@ -139,13 +149,37 @@ export const AiExplainModal = ({ isOpen, onClose, query }: AiExplainModalProps) 
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end p-4 border-t border-default bg-elevated/50 rounded-b-xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-surface-secondary hover:bg-surface-tertiary text-primary rounded-lg text-sm transition-colors"
-          >
-            Close
-          </button>
+        <div className="flex items-center justify-between p-4 border-t border-default bg-elevated/50 rounded-b-xl">
+          <div className="text-xs text-muted">
+            {suggestedSql && (
+              <span className="text-purple-400 flex items-center gap-1">
+                <Sparkles size={12} />
+                พบคิวรีที่ AI แนะนำแก้ไข
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {suggestedSql && onApplyFix && (
+              <button
+                type="button"
+                onClick={() => {
+                  onApplyFix(suggestedSql);
+                  onClose();
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-sm font-medium transition-all shadow-md shadow-purple-900/30 flex items-center gap-1.5 cursor-pointer"
+                title="นำคิวรีที่แนะนำไปใส่ใน Editor และรันใหม่ทันที"
+              >
+                <Sparkles size={14} />
+                <span>นำคิวรีที่แนะนำไปใช้ (Apply Fix)</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-surface-secondary hover:bg-surface-tertiary text-primary rounded-lg text-sm transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </Modal>

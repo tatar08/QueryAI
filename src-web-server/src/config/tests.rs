@@ -12,14 +12,25 @@ fn uses_safe_development_defaults() {
         "postgres://tabularis:tabularis@127.0.0.1:5432/tabularis"
     );
     assert_eq!(config.public_origin, "http://localhost:5173");
+    assert_eq!(config.allowed_origins, vec!["http://localhost:5173"]);
     assert_eq!(config.oidc, None);
     assert_eq!(config.session_ttl_seconds, 28_800);
     assert!(!config.session_cookie_secure);
+    assert_eq!(config.rate_limit_per_minute, 120);
+    assert_eq!(config.rate_limit_burst, 30);
 }
 
 #[test]
 fn accepts_explicit_production_configuration() {
     let config = AppConfig::from_values([
+        (
+            "TABULARIS_JWT_SECRET",
+            "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+        ),
+        (
+            "TABULARIS_MASTER_KEY",
+            "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+        ),
         ("TABULARIS_BIND_ADDRESS", "0.0.0.0:8080"),
         ("TABULARIS_ENVIRONMENT", "production"),
         ("TABULARIS_PUBLIC_ORIGIN", "https://db.example.com"),
@@ -168,5 +179,51 @@ fn redacts_the_oidc_client_secret_from_debug_output() {
 fn rejects_metadata_pool_sizes_outside_the_supported_range() {
     for value in ["0", "101", "not-a-number"] {
         assert!(AppConfig::from_values([("TABULARIS_METADATA_MAX_CONNECTIONS", value)]).is_err());
+    }
+}
+
+#[test]
+fn parses_allowed_origins_and_rejects_insecure_origins_in_production() {
+    let dev_config = AppConfig::from_values([(
+        "TABULARIS_ALLOWED_ORIGINS",
+        "http://localhost:5173, http://127.0.0.1:5173",
+    )])
+    .unwrap();
+    assert_eq!(
+        dev_config.allowed_origins,
+        vec!["http://localhost:5173", "http://127.0.0.1:5173"]
+    );
+
+    let prod_err = AppConfig::from_values([
+        ("TABULARIS_ENVIRONMENT", "production"),
+        ("TABULARIS_PUBLIC_ORIGIN", "https://db.example.com"),
+        (
+            "TABULARIS_METADATA_DATABASE_URL",
+            "postgres://metadata.internal/tabularis",
+        ),
+        ("TABULARIS_OIDC_ISSUER_URL", "https://identity.example.com"),
+        ("TABULARIS_OIDC_CLIENT_ID", "tabularis"),
+        ("TABULARIS_OIDC_CLIENT_SECRET", "test-secret"),
+        (
+            "TABULARIS_OIDC_REDIRECT_URI",
+            "https://db.example.com/api/v1/auth/callback",
+        ),
+        (
+            "TABULARIS_ALLOWED_ORIGINS",
+            "https://db.example.com, http://insecure.example.com",
+        ),
+    ])
+    .unwrap_err();
+
+    assert!(prod_err.contains("must use https:// in production"));
+}
+
+#[test]
+fn rejects_rate_limits_outside_the_supported_range() {
+    for value in ["0", "10001", "invalid"] {
+        assert!(AppConfig::from_values([("TABULARIS_RATE_LIMIT_PER_MINUTE", value)]).is_err());
+    }
+    for value in ["0", "1001", "invalid"] {
+        assert!(AppConfig::from_values([("TABULARIS_RATE_LIMIT_BURST", value)]).is_err());
     }
 }

@@ -417,4 +417,40 @@ describe('HttpTransport', () => {
       requestId: 'request-1',
     });
   });
+
+  it('routes requests to workspace-scoped endpoints when getWorkspaceId is provided', async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(Response.json([])));
+    const transport = new HttpTransport({
+      baseUrl: 'https://tabularis.example/',
+      fetchImplementation,
+      getWorkspaceId: () => 'ws-team/1',
+    });
+
+    await transport.listConnections();
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      'https://tabularis.example/api/v1/workspaces/ws-team%2F1/connections',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+
+    await transport.testSavedConnection({
+      connection: {
+        id: 'conn-1',
+        name: 'Test DB',
+        params: { driver: 'postgres', database: 'test' },
+      },
+    });
+    expect(fetchImplementation).toHaveBeenLastCalledWith(
+      'https://tabularis.example/api/v1/workspaces/ws-team%2F1/connections/conn-1/schema?resource=schemas',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+
+    await transport.listSchemas('conn-1');
+    expect(fetchImplementation).toHaveBeenLastCalledWith(
+      'https://tabularis.example/api/v1/workspaces/ws-team%2F1/connections/conn-1/schema?resource=schemas',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+  });
 });
+

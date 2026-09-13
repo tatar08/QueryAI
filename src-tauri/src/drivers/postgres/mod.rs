@@ -2,6 +2,7 @@ pub mod types;
 
 pub mod export;
 pub mod extract;
+pub mod tools;
 
 mod binding;
 mod client;
@@ -1782,7 +1783,7 @@ impl PostgresDriver {
                     readonly: false,
                     triggers: true,
                     supports_ssl: true,
-                    user_management: false,
+                    user_management: true,
                     sql_dialect: Some(SqlDialect::Postgres),
                 },
                 is_builtin: true,
@@ -2552,5 +2553,76 @@ impl DatabaseDriver for PostgresDriver {
                 foreign_keys: fks_map.remove(&t.name).unwrap_or_default(),
             })
             .collect())
+    }
+
+    async fn get_db_privilege_catalog(&self) -> Result<crate::models::DbPrivilegeCatalog, String> {
+        Ok(tools::get_privilege_catalog())
+    }
+
+    async fn get_db_users(
+        &self,
+        params: &crate::models::ConnectionParams,
+    ) -> Result<Vec<crate::models::DbUserInfo>, String> {
+        tools::get_db_users(params).await
+    }
+
+    async fn get_db_user_grants(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        _host: &str,
+    ) -> Result<Vec<String>, String> {
+        tools::get_db_user_grants(params, user).await
+    }
+
+    async fn get_db_user_privileges(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        _host: &str,
+    ) -> Result<Vec<crate::models::DbUserGrantSet>, String> {
+        tools::get_db_user_privileges(params, user).await
+    }
+
+    async fn create_db_user(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        _host: &str,
+        password: &str,
+    ) -> Result<(), String> {
+        tools::create_db_user(params, user, password).await
+    }
+
+    async fn drop_db_user(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        _host: &str,
+    ) -> Result<(), String> {
+        tools::drop_db_user(params, user).await
+    }
+
+    async fn set_db_user_password(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        _host: &str,
+        password: &str,
+    ) -> Result<(), String> {
+        tools::set_db_user_password(params, user, password).await
+    }
+
+    async fn apply_db_user_privileges(
+        &self,
+        params: &crate::models::ConnectionParams,
+        user: &str,
+        host: &str,
+        database: Option<&str>,
+        table: Option<&str>,
+        privileges: &[String],
+        grant: bool,
+    ) -> Result<(), String> {
+        tools::apply_db_user_privileges(params, user, host, database, table, privileges, grant).await
     }
 }

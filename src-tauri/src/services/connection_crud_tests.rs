@@ -19,6 +19,7 @@ fn saved_connection(id: &str) -> SavedConnection {
         }),
         tag_ids: Some(vec!["tag-1".to_string()]),
         environment: Some("development".to_string()),
+        read_only: Some(false),
     }
 }
 
@@ -30,6 +31,7 @@ fn new_connections_start_without_collection_metadata() {
         ConnectionParams::default(),
         Some(true),
         Some("production".to_string()),
+        Some(false),
     );
 
     assert_eq!(connection.id, "connection-1");
@@ -40,6 +42,7 @@ fn new_connections_start_without_collection_metadata() {
     assert_eq!(connection.tag_ids, None);
     assert_eq!(connection.detect_json_in_text_columns, Some(true));
     assert_eq!(connection.environment.as_deref(), Some("production"));
+    assert_eq!(connection.read_only, Some(false));
 }
 
 #[test]
@@ -51,6 +54,7 @@ fn updates_preserve_collection_metadata() {
         ConnectionParams::default(),
         Some(true),
         Some("staging".to_string()),
+        Some(true),
     );
 
     assert_eq!(updated.id, existing.id);

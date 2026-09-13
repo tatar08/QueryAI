@@ -47,12 +47,31 @@ export async function readFile(path: string, _options?: FsOptions): Promise<Uint
   return new Uint8Array();
 }
 
+function triggerBrowserDownload(filename: string, data: string | Uint8Array | ArrayBuffer) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  try {
+    const parts = [data instanceof ArrayBuffer ? new Uint8Array(data) : data];
+    const blob = new Blob(parts as any, { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename.split(/[/\\]/).pop() || "download";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.warn("Browser download failed:", err);
+  }
+}
+
 export async function writeTextFile(
   path: string,
   contents: string,
   _options?: FsOptions
 ): Promise<void> {
   fileStore.set(path, contents);
+  triggerBrowserDownload(path, contents);
 }
 
 export async function writeFile(
@@ -67,6 +86,7 @@ export async function writeFile(
   } else if (data instanceof ArrayBuffer) {
     fileStore.set(path, new Uint8Array(data));
   }
+  triggerBrowserDownload(path, data);
 }
 
 export async function exists(path: string, _options?: FsOptions): Promise<boolean> {

@@ -75,3 +75,54 @@ fn rejects_missing_actor_context_before_persistence() {
     assert_eq!(error, AuditServiceError::InvalidScope("actor user ID"));
     assert!(repository.event.lock().unwrap().is_none());
 }
+
+#[tokio::test]
+async fn test_memory_audit_repository_filtering_and_pagination() {
+    use super::{MemoryAuditRepository, WorkspaceAuditRepository};
+    use serde_json::json;
+
+    let repo = MemoryAuditRepository::new();
+
+    let event1 = AuditEvent {
+        id: "ev-1".to_string(),
+        scope: AuditScope::Workspace {
+            workspace_id: "ws-1".to_string(),
+            actor_user_id: "u-1".to_string(),
+        },
+        action: "connection.created".to_string(),
+        resource_type: "connection".to_string(),
+        resource_id: Some("c-1".to_string()),
+        request_id: None,
+        occurred_at: "2026-09-06T00:00:00Z".to_string(),
+        metadata: json!({ "name": "DB 1" }),
+    };
+
+    let event2 = AuditEvent {
+        id: "ev-2".to_string(),
+        scope: AuditScope::Workspace {
+            workspace_id: "ws-2".to_string(),
+            actor_user_id: "u-2".to_string(),
+        },
+        action: "connection.deleted".to_string(),
+        resource_type: "connection".to_string(),
+        resource_id: Some("c-2".to_string()),
+        request_id: None,
+        occurred_at: "2026-09-06T00:01:00Z".to_string(),
+        metadata: json!({}),
+    };
+
+    repo.record(&event1).unwrap();
+    repo.record(&event2).unwrap();
+
+    let list_ws1 = repo.list_for_workspace("ws-1", 10, 0).await.unwrap();
+    assert_eq!(list_ws1.len(), 1);
+    assert_eq!(list_ws1[0].id, "ev-1");
+    assert_eq!(list_ws1[0].action, "connection.created");
+
+    let list_ws2 = repo.list_for_workspace("ws-2", 10, 0).await.unwrap();
+    assert_eq!(list_ws2.len(), 1);
+    assert_eq!(list_ws2[0].id, "ev-2");
+
+    let list_ws3 = repo.list_for_workspace("ws-3", 10, 0).await.unwrap();
+    assert!(list_ws3.is_empty());
+}

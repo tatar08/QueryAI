@@ -12,6 +12,7 @@ import { Connections } from "./pages/Connections";
 import { Editor } from "./pages/Editor";
 import { McpPage } from "./pages/McpPage";
 import { Settings } from "./pages/Settings";
+import { MonitorPage } from "./pages/Monitor";
 import { SchemaDiagramPage } from "./pages/SchemaDiagramPage";
 import { TaskManagerPage } from "./pages/TaskManagerPage";
 import { VisualExplainPage } from "./pages/VisualExplainPage";
@@ -25,6 +26,13 @@ import { WhatsNewModal } from "./components/modals/WhatsNewModal";
 import { AiApprovalGate } from "./components/modals/AiApprovalGate";
 import { PluginInstallConfirmModal } from "./components/modals/PluginInstallConfirmModal";
 import { SshAskpassGate } from "./components/modals/SshAskpassGate";
+import { TeamMembersModal } from "./components/modals/TeamMembersModal";
+import { DesignSystemModal } from "./components/modals/DesignSystemModal";
+import { PostgresToolsModal } from "./components/modals/PostgresToolsModal";
+import { SqliteToolsModal } from "./components/modals/SqliteToolsModal";
+import { PinAuthModal } from "./components/modals/PinAuthModal";
+import { DatabaseMonitorModal } from "./components/modals/DatabaseMonitorModal";
+import { useWorkspace } from "./contexts/WorkspaceContext";
 import { useUpdate } from "./hooks/useUpdate";
 import { useChangelog } from "./hooks/useChangelog";
 import { useSettings } from "./hooks/useSettings";
@@ -44,6 +52,12 @@ export function App() {
     dismissUpdate,
     error: updateError,
   } = useUpdate();
+  const { isTeamModalOpen, setIsTeamModalOpen } = useWorkspace();
+  const [isDesignSystemOpen, setIsDesignSystemOpen] = useState(false);
+  const [isPostgresToolsOpen, setIsPostgresToolsOpen] = useState(false);
+  const [isSqliteToolsOpen, setIsSqliteToolsOpen] = useState(false);
+  const [isPinAuthOpen, setIsPinAuthOpen] = useState(false);
+  const [isMonitorOpen, setIsMonitorOpen] = useState(false);
   const { settings, updateSetting, isLoading: isSettingsLoading } = useSettings();
   useResultTypeColors();
   const [isDebugMode, setIsDebugMode] = useState(false);
@@ -110,6 +124,69 @@ export function App() {
     };
   }, [isDebugMode]);
 
+  useEffect(() => {
+    const handleOpenDesignSystem = () => {
+      setIsDesignSystemOpen(true);
+    };
+
+    window.addEventListener("open-design-system", handleOpenDesignSystem);
+    return () => {
+      window.removeEventListener("open-design-system", handleOpenDesignSystem);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPostgresTools = () => {
+      setIsPostgresToolsOpen(true);
+    };
+
+    window.addEventListener("open-postgres-tools", handleOpenPostgresTools);
+    window.addEventListener("app:open-postgres-tools", handleOpenPostgresTools);
+    return () => {
+      window.removeEventListener("open-postgres-tools", handleOpenPostgresTools);
+      window.removeEventListener("app:open-postgres-tools", handleOpenPostgresTools);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenSqliteTools = () => {
+      setIsSqliteToolsOpen(true);
+    };
+
+    window.addEventListener("open-sqlite-tools", handleOpenSqliteTools);
+    window.addEventListener("app:open-sqlite-tools", handleOpenSqliteTools);
+    return () => {
+      window.removeEventListener("open-sqlite-tools", handleOpenSqliteTools);
+      window.removeEventListener("app:open-sqlite-tools", handleOpenSqliteTools);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPinAuth = () => {
+      setIsPinAuthOpen(true);
+    };
+
+    window.addEventListener("open-pin-auth", handleOpenPinAuth);
+    window.addEventListener("app:open-pin-auth", handleOpenPinAuth);
+    return () => {
+      window.removeEventListener("open-pin-auth", handleOpenPinAuth);
+      window.removeEventListener("app:open-pin-auth", handleOpenPinAuth);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenMonitor = () => {
+      setIsMonitorOpen(true);
+    };
+
+    window.addEventListener("open-monitor", handleOpenMonitor);
+    window.addEventListener("app:open-monitor", handleOpenMonitor);
+    return () => {
+      window.removeEventListener("open-monitor", handleOpenMonitor);
+      window.removeEventListener("app:open-monitor", handleOpenMonitor);
+    };
+  }, []);
+
   return (
     <>
       <AlertProvider>
@@ -136,6 +213,7 @@ export function App() {
                         }
                       />
                       <Route path="mcp" element={<McpPage />} />
+                      <Route path="monitor" element={<MonitorPage />} />
                       <Route path="settings" element={<Settings />} />
                     </Route>
                     <Route
@@ -197,6 +275,36 @@ export function App() {
         }}
         onCancel={deepLinkInstall.cancel}
         configuredRegistry={settings.tabulariumRegistryUrl ?? null}
+      />
+
+      <TeamMembersModal
+        isOpen={isTeamModalOpen}
+        onClose={() => setIsTeamModalOpen(false)}
+      />
+
+      <DesignSystemModal
+        isOpen={isDesignSystemOpen}
+        onClose={() => setIsDesignSystemOpen(false)}
+      />
+
+      <PostgresToolsModal
+        isOpen={isPostgresToolsOpen}
+        onClose={() => setIsPostgresToolsOpen(false)}
+      />
+
+      <SqliteToolsModal
+        isOpen={isSqliteToolsOpen}
+        onClose={() => setIsSqliteToolsOpen(false)}
+      />
+
+      <PinAuthModal
+        isOpen={isPinAuthOpen}
+        onClose={() => setIsPinAuthOpen(false)}
+      />
+
+      <DatabaseMonitorModal
+        isOpen={isMonitorOpen}
+        onClose={() => setIsMonitorOpen(false)}
       />
 
     </>

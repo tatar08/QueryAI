@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import {
   DatabaseContext,
   type ViewInfo,
@@ -87,6 +88,7 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
   const [connections, setConnections] = useState<SavedConnection[]>([]);
   const [connectionGroups, setConnectionGroups] = useState<ConnectionGroup[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+  const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState(false);
   // Connection ids open anywhere in the app (shared backend, all windows).
   // Kept in sync via the `connections:active-changed` broadcast so each window
   // can show accurate cross-window connection status.
@@ -1019,12 +1021,59 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeConnectionId, updateConnectionData]);
 
+  const switchDatabase = useCallback(
+    async (databaseName: string, targetConnectionId?: string) => {
+      const connId = targetConnectionId ?? activeConnectionId;
+      if (!connId || !databaseName) return;
+
+      const conn = connections.find((c) => c.id === connId);
+      if (!conn) return;
+
+      const newParams = { ...conn.params, database: databaseName };
+      try {
+        await invoke("update_connection", {
+          id: conn.id,
+          name: conn.name,
+          params: newParams,
+          detectJsonInTextColumns: conn.detect_json_in_text_columns ?? null,
+          environment: conn.environment ?? null,
+          read_only: conn.read_only ?? null,
+        });
+      } catch (err) {
+        console.warn("Failed to persist database change, proceeding in-memory:", err);
+      }
+
+      setConnections((prev) =>
+        prev.map((c) => (c.id === connId ? { ...c, params: newParams } : c))
+      );
+
+      try {
+        await connect(connId);
+        showToast(
+          t("sidebar.switchedDatabase", {
+            database: databaseName,
+            defaultValue: `Switched to database "${databaseName}"`,
+          }),
+          { kind: "info" }
+        );
+      } catch {
+        showToast(
+          t("sidebar.switchDatabaseFailed", {
+            defaultValue: `Failed to switch to database "${databaseName}"`,
+          }),
+          { kind: "error" }
+        );
+      }
+    },
+    [activeConnectionId, connections, connect, showToast, t]
+  );
+
   const loadConnections = useCallback(async () => {
     setIsLoadingConnections(true);
     try {
       const result = await backendTransport.listConnectionCatalogue();
-      setConnections(result.connections);
-      setConnectionGroups(result.groups);
+      setConnections(result?.connections ?? []);
+      setConnectionGroups(result?.groups ?? []);
     } catch (e) {
       console.error('Failed to load connections:', e);
     } finally {
@@ -1221,8 +1270,8 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
     // behaviour evolves.
     await backendTransport.deleteConnectionGroup(id);
     const fresh = await backendTransport.listConnectionCatalogue();
-    setConnections(fresh.connections);
-    setConnectionGroups(fresh.groups);
+    setConnections(fresh?.connections ?? []);
+    setConnectionGroups(fresh?.groups ?? []);
   }, []);
 
   const moveConnectionToGroup = useCallback(async (
@@ -1329,6 +1378,9 @@ export const DatabaseProvider = ({ children }: { children: ReactNode }) => {
       reorderGroups,
       reorderConnectionsInGroup,
       toggleGroupCollapsed,
+      switchDatabase,
+      isQuickSwitcherOpen,
+      setIsQuickSwitcherOpen,
     }}>
       {children}
     </DatabaseContext.Provider>

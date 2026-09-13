@@ -15,6 +15,8 @@ import { EditorProvider } from './contexts/EditorProvider';
 import { ThemeProvider } from './contexts/ThemeProvider';
 import { UpdateProvider } from './contexts/UpdateProvider';
 import { ProductionGuardProvider } from './contexts/ProductionGuardContext';
+import { WebSessionGate } from './components/workspace/WebSessionGate';
+import { WorkspaceProvider } from './contexts/WorkspaceContext';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
@@ -22,17 +24,21 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <ThemeProvider>
         <SettingsProvider>
           <ToastProvider>
+            <WebSessionGate>
             <DatabaseProvider>
-              <SavedQueriesProvider>
-              <QueryHistoryProvider>
-                <EditorProvider>
-                  <ProductionGuardProvider>
-                    <App />
-                  </ProductionGuardProvider>
-                </EditorProvider>
-              </QueryHistoryProvider>
-            </SavedQueriesProvider>
+              <WorkspaceProvider>
+                <SavedQueriesProvider>
+                <QueryHistoryProvider>
+                  <EditorProvider>
+                    <ProductionGuardProvider>
+                      <App />
+                    </ProductionGuardProvider>
+                  </EditorProvider>
+                </QueryHistoryProvider>
+                </SavedQueriesProvider>
+              </WorkspaceProvider>
             </DatabaseProvider>
+            </WebSessionGate>
           </ToastProvider>
         </SettingsProvider>
       </ThemeProvider>

@@ -101,6 +101,7 @@ describe("ExplorerSidebar — schema load error block", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 
     vi.mocked(useDatabase).mockReturnValue({
+      connections: [],
       activeConnectionId: "c1",
       activeCapabilities: { schemas: true },
       schemas: [],

@@ -533,6 +533,8 @@ pub fn run() {
             // AI
             ai::generate_ai_query,
             ai::explain_ai_query,
+            ai::improve_ai_query,
+            ai::chat_ai,
             ai::analyze_ai_explain_plan,
             ai::generate_cell_name,
             ai::generate_tab_rename,
@@ -572,6 +574,22 @@ pub fn run() {
             commands::drop_db_user,
             commands::set_db_user_password,
             commands::apply_db_user_privileges,
+            // PostgreSQL Tools
+            commands::get_pg_activity,
+            commands::cancel_pg_backend,
+            commands::terminate_pg_backend,
+            commands::get_pg_extensions,
+            commands::install_pg_extension,
+            commands::drop_pg_extension,
+            commands::execute_pg_maintenance,
+            commands::get_pg_database_metrics,
+            // SQLite Tools
+            commands::get_sqlite_pragmas,
+            commands::set_sqlite_pragma,
+            commands::check_sqlite_integrity,
+            commands::execute_sqlite_maintenance,
+            commands::get_sqlite_attached_databases,
+            commands::vacuum_sqlite_into,
             // MCP
             mcp::install::get_mcp_status,
             mcp::install::install_mcp_config,

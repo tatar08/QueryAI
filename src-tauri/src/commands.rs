@@ -904,6 +904,12 @@ pub async fn drop_routine<R: Runtime>(
     );
 
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        return Err(format!(
+            "Operation blocked: Connection \"{}\" is in READ ONLY mode. Dropping routines is strictly prohibited.",
+            saved_conn.name
+        ));
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -960,6 +966,7 @@ pub async fn save_connection<R: Runtime>(
     params: ConnectionParams,
     detect_json_in_text_columns: Option<bool>,
     environment: Option<String>,
+    read_only: Option<bool>,
 ) -> Result<SavedConnection, String> {
     log::info!("Saving new connection: {}", name);
     let path = get_config_path(&app)?;
@@ -979,6 +986,7 @@ pub async fn save_connection<R: Runtime>(
             params,
             detect_json_in_text_columns,
             environment,
+            read_only,
         },
     )?;
 
@@ -1036,6 +1044,7 @@ pub async fn update_connection<R: Runtime>(
     params: ConnectionParams,
     detect_json_in_text_columns: Option<bool>,
     environment: Option<String>,
+    read_only: Option<bool>,
 ) -> Result<SavedConnection, String> {
     let path = get_config_path(&app)?;
     let cache = app.state::<std::sync::Arc<crate::credential_cache::CredentialCache>>();
@@ -1053,6 +1062,7 @@ pub async fn update_connection<R: Runtime>(
             params,
             detect_json_in_text_columns,
             environment,
+            read_only,
         },
     )?;
 
@@ -1227,6 +1237,7 @@ pub async fn duplicate_connection<R: Runtime>(
         // Normalize rather than fail: an invalid on-disk value must not
         // block duplication, the copy just becomes "unclassified".
         environment: validate_environment(original.environment.clone()).unwrap_or(None),
+        read_only: original.read_only,
     };
 
     conn_file.connections.push(new_conn.clone());
@@ -2410,6 +2421,7 @@ mod tests {
             appearance: None,
             tag_ids: None,
             environment: None,
+            read_only: None,
         }
     }
 
@@ -2443,6 +2455,7 @@ mod tests {
             }),
             tag_ids: None,
             environment: None,
+            read_only: None,
         };
 
         // Simulate the pattern used in update_connection after the fix.
@@ -2458,6 +2471,7 @@ mod tests {
             appearance: original_appearance,
             tag_ids: None,
             environment: None,
+            read_only: None,
         };
 
         let app = updated
@@ -2483,6 +2497,7 @@ mod tests {
             appearance,
             tag_ids: None,
             environment: None,
+            read_only: None,
         };
         ConnectionsFile {
             groups: vec![],
@@ -3607,6 +3622,12 @@ pub async fn delete_record<R: Runtime>(
         pk_map
     );
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        return Err(format!(
+            "Operation blocked: Connection \"{}\" is in READ ONLY mode. Deleting records is strictly prohibited.",
+            saved_conn.name
+        ));
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -3638,6 +3659,12 @@ pub async fn update_record<R: Runtime>(
         pk_map
     );
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        return Err(format!(
+            "Operation blocked: Connection \"{}\" is in READ ONLY mode. Updating records is strictly prohibited.",
+            saved_conn.name
+        ));
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -3885,6 +3912,12 @@ pub async fn insert_record<R: Runtime>(
         columns.join(", ")
     );
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        return Err(format!(
+            "Operation blocked: Connection \"{}\" is in READ ONLY mode. Inserting records is strictly prohibited.",
+            saved_conn.name
+        ));
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -3985,6 +4018,20 @@ pub async fn execute_query<R: Runtime>(
         .map_err(|error| error.to_string())?;
 
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        let kind = crate::ai_activity::classify_query_kind(&query_scope.query);
+        if kind != "select" {
+            log::warn!(
+                "Blocked mutating query on read-only connection: {} | Kind: {}",
+                connection_id,
+                kind
+            );
+            return Err(format!(
+                "Operation blocked: Connection \"{}\" is configured as READ ONLY. Mutating or non-SELECT queries are strictly prohibited.",
+                saved_conn.name
+            ));
+        }
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -4080,6 +4127,22 @@ pub async fn execute_query_batch<R: Runtime>(
         .collect();
 
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
+    if saved_conn.read_only == Some(true) {
+        for q in &sanitized_queries {
+            let kind = crate::ai_activity::classify_query_kind(q);
+            if kind != "select" {
+                log::warn!(
+                    "Blocked mutating batch query on read-only connection: {} | Kind: {}",
+                    connection_id,
+                    kind
+                );
+                return Err(format!(
+                    "Operation blocked: Connection \"{}\" is configured as READ ONLY. Batch query contains mutating or non-SELECT statements.",
+                    saved_conn.name
+                ));
+            }
+        }
+    }
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
     let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
@@ -5098,6 +5161,145 @@ pub async fn apply_db_user_privileges<R: Runtime>(
         log::error!("Failed to apply privileges for '{user}'@'{host}': {e}");
     }
     result
+}
+
+// --- PostgreSQL Tools & Maintenance ----------------------------------------
+
+#[tauri::command]
+pub async fn get_pg_activity<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+) -> Result<Vec<crate::models::PgActivityInfo>, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::get_pg_activity(&params).await
+}
+
+#[tauri::command]
+pub async fn cancel_pg_backend<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    pid: i32,
+) -> Result<bool, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::cancel_pg_backend(&params, pid).await
+}
+
+#[tauri::command]
+pub async fn terminate_pg_backend<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    pid: i32,
+) -> Result<bool, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::terminate_pg_backend(&params, pid).await
+}
+
+#[tauri::command]
+pub async fn get_pg_extensions<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+) -> Result<Vec<crate::models::PgExtensionInfo>, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::get_pg_extensions(&params).await
+}
+
+#[tauri::command]
+pub async fn install_pg_extension<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    name: String,
+) -> Result<(), String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::install_pg_extension(&params, &name).await
+}
+
+#[tauri::command]
+pub async fn drop_pg_extension<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    name: String,
+) -> Result<(), String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::drop_pg_extension(&params, &name).await
+}
+
+#[tauri::command]
+pub async fn execute_pg_maintenance<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    operation: String,
+    target: Option<String>,
+) -> Result<String, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::execute_pg_maintenance(&params, &operation, target.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn get_pg_database_metrics<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+) -> Result<crate::models::PgDatabaseMetrics, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::postgres::tools::get_pg_database_metrics(&params).await
+}
+
+#[tauri::command]
+pub async fn get_sqlite_pragmas<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+) -> Result<crate::models::SqlitePragmaInfo, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::get_sqlite_pragmas(&params).await
+}
+
+#[tauri::command]
+pub async fn set_sqlite_pragma<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    pragma_name: String,
+    value: String,
+) -> Result<String, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::set_sqlite_pragma(&params, &pragma_name, &value).await
+}
+
+#[tauri::command]
+pub async fn check_sqlite_integrity<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    quick: Option<bool>,
+) -> Result<Vec<String>, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::check_sqlite_integrity(&params, quick.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn execute_sqlite_maintenance<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    operation: String,
+) -> Result<String, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::execute_sqlite_maintenance(&params, &operation).await
+}
+
+#[tauri::command]
+pub async fn get_sqlite_attached_databases<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+) -> Result<Vec<crate::models::SqliteAttachedDatabase>, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::get_sqlite_attached_databases(&params).await
+}
+
+#[tauri::command]
+pub async fn vacuum_sqlite_into<R: Runtime>(
+    app: AppHandle<R>,
+    connection_id: String,
+    destination_path: String,
+) -> Result<String, String> {
+    let (_, params) = user_mgmt_context(&app, &connection_id).await?;
+    crate::drivers::sqlite::tools::vacuum_sqlite_into(&params, &destination_path).await
 }
 
 /// Register a connection as active for health-check pinging.

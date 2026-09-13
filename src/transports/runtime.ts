@@ -1,3 +1,4 @@
+import { workspaceHttp } from "./workspaceHttp";
 import {
   createBackendTransport,
   parseBackendTransportMode,
@@ -15,7 +16,7 @@ const mode = parseBackendTransportMode(
   import.meta.env.VITE_TABULARIS_BACKEND_MODE,
 );
 
-export const backendTransport = createBackendTransport({
+export const backendTransport = mode === "http" ? workspaceHttp : createBackendTransport({
   mode,
   apiBaseUrl: import.meta.env.VITE_TABULARIS_API_BASE_URL,
   getCsrfToken: readCsrfToken,

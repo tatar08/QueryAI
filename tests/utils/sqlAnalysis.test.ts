@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseTablesFromQuery, getCurrentStatement, isDestructiveWithoutWhere, classifyDangerousQuery, isDangerousQuery } from '../../src/utils/sqlAnalysis';
+import {
+  parseTablesFromQuery,
+  getCurrentStatement,
+  isDestructiveWithoutWhere,
+  classifyDangerousQuery,
+  isDangerousQuery,
+  isReadOnlyQuery,
+} from '../../src/utils/sqlAnalysis';
 
 describe('sqlAnalysis utils', () => {
   describe('parseTablesFromQuery', () => {
@@ -314,6 +321,53 @@ WHERE id = 1`;
       expect(isDangerousQuery('DROP TABLE users')).toBe(true);
       expect(isDangerousQuery('DELETE FROM users')).toBe(true);
       expect(isDangerousQuery('SELECT * FROM users')).toBe(false);
+    });
+  });
+
+  describe('isReadOnlyQuery', () => {
+    it('identifies pure read statements as true', () => {
+      expect(isReadOnlyQuery('SELECT * FROM users')).toBe(true);
+      expect(isReadOnlyQuery('SELECT 1')).toBe(true);
+      expect(isReadOnlyQuery('SHOW TABLES')).toBe(true);
+      expect(isReadOnlyQuery('DESCRIBE users')).toBe(true);
+      expect(isReadOnlyQuery('DESC users')).toBe(true);
+      expect(isReadOnlyQuery('PRAGMA table_info(users)')).toBe(true);
+      expect(isReadOnlyQuery('VALUES (1), (2)')).toBe(true);
+      expect(isReadOnlyQuery('EXPLAIN SELECT * FROM users')).toBe(true);
+      expect(isReadOnlyQuery('WITH t AS (SELECT 1) SELECT * FROM t')).toBe(true);
+    });
+
+    it('rejects data modifying statements as false', () => {
+      expect(isReadOnlyQuery('INSERT INTO users (name) VALUES ("Alice")')).toBe(false);
+      expect(isReadOnlyQuery('UPDATE users SET name = "Bob" WHERE id = 1')).toBe(false);
+      expect(isReadOnlyQuery('DELETE FROM users WHERE id = 1')).toBe(false);
+      expect(isReadOnlyQuery('MERGE INTO users USING changes ON users.id = changes.id')).toBe(false);
+      expect(isReadOnlyQuery('REPLACE INTO users VALUES (1, "Carol")')).toBe(false);
+    });
+
+    it('rejects DDL and schema modifying statements as false', () => {
+      expect(isReadOnlyQuery('DROP TABLE users')).toBe(false);
+      expect(isReadOnlyQuery('ALTER TABLE users ADD COLUMN age INT')).toBe(false);
+      expect(isReadOnlyQuery('TRUNCATE TABLE users')).toBe(false);
+      expect(isReadOnlyQuery('CREATE TABLE test (id INT)')).toBe(false);
+      expect(isReadOnlyQuery('DROP DATABASE mydb')).toBe(false);
+      expect(isReadOnlyQuery('GRANT ALL PRIVILEGES ON *.* TO user')).toBe(false);
+    });
+
+    it('rejects EXPLAIN with mutating statements (EXPLAIN ANALYZE)', () => {
+      expect(isReadOnlyQuery('EXPLAIN ANALYZE DELETE FROM users')).toBe(false);
+      expect(isReadOnlyQuery('EXPLAIN (ANALYZE) UPDATE users SET x = 1')).toBe(false);
+    });
+
+    it('rejects mutating CTEs', () => {
+      expect(isReadOnlyQuery('WITH t AS (SELECT 1) DELETE FROM users WHERE id IN (SELECT * FROM t)')).toBe(false);
+      expect(isReadOnlyQuery('WITH t AS (SELECT 1) INSERT INTO audit (x) SELECT * FROM t')).toBe(false);
+    });
+
+    it('rejects batch queries containing any mutating statement', () => {
+      expect(isReadOnlyQuery('SELECT 1; DROP TABLE users;')).toBe(false);
+      expect(isReadOnlyQuery('SELECT * FROM users; INSERT INTO audit VALUES (1);')).toBe(false);
+      expect(isReadOnlyQuery('SELECT 1; SELECT 2; SHOW TABLES;')).toBe(true);
     });
   });
 });

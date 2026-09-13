@@ -1,3 +1,4 @@
+import { webMode } from "../../utils/webSession";
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -159,6 +160,7 @@ interface SavedConnection {
   appearance?: ConnectionAppearance;
   tag_ids?: string[];
   environment?: "development" | "staging" | "production";
+  read_only?: boolean;
 }
 
 interface NewConnectionModalProps {
@@ -357,6 +359,7 @@ export const NewConnectionModal = ({
   const [loadAllDatabases, setLoadAllDatabases] = useState(true);
   const [dbSearchQuery, setDbSearchQuery] = useState("");
   const [detectJsonInTextColumns, setDetectJsonInTextColumns] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const [passwordDirty, setPasswordDirty] = useState(false);
   const [sshPasswordDirty, setSshPasswordDirty] = useState(false);
   const [connectionString, setConnectionString] = useState("");
@@ -1671,6 +1674,7 @@ export const NewConnectionModal = ({
         setDetectJsonInTextColumns(
           initialConnection.detect_json_in_text_columns === true,
         );
+        setReadOnly(initialConnection.read_only === true);
         setAppearance(initialConnection.appearance ?? {});
         setTagIds(initialConnection.tag_ids ?? []);
         setEnvironment(initialConnection.environment ?? "");
@@ -1714,21 +1718,30 @@ export const NewConnectionModal = ({
         const editIsMultiDb = isMultiDatabaseCapable(
           editDriverForDb?.capabilities,
         );
+        const isEditNetDriver =
+          editDriverForDb?.capabilities?.file_based === false &&
+          !editDriverForDb?.capabilities?.folder_based;
+        const normalizedParamsForForm = {
+          ...paramsForForm,
+          host:
+            paramsForForm.host?.trim() ||
+            (isEditNetDriver ? "localhost" : paramsForForm.host),
+        };
         if (Array.isArray(db)) {
           setSelectedDatabasesState(db);
           setLoadAllDatabases(false);
-          setFormData({ ...paramsForForm, database: db[0] ?? "" });
+          setFormData({ ...normalizedParamsForForm, database: db[0] ?? "" });
         } else if (editIsMultiDb && db.trim()) {
           // A saved single database on a multi-db driver is an explicit
           // one-element selection.
           setSelectedDatabasesState([db]);
           setLoadAllDatabases(false);
-          setFormData({ ...paramsForForm });
+          setFormData({ ...normalizedParamsForForm });
         } else {
           setSelectedDatabasesState([]);
           // Empty database on a multi-db driver = "all databases" mode.
           setLoadAllDatabases(editIsMultiDb);
-          setFormData({ ...paramsForForm });
+          setFormData({ ...normalizedParamsForForm });
         }
 
         if (params.k8s_enabled && isInlineK8s) {
@@ -1792,6 +1805,7 @@ export const NewConnectionModal = ({
         setK8sMode("existing");
         resetK8sPathOverrides();
         setDetectJsonInTextColumns(false);
+        setReadOnly(false);
         setAppearance({});
         setTagIds([]);
         setEnvironment("");
@@ -1811,10 +1825,15 @@ export const NewConnectionModal = ({
 
   const handleDriverChange = (newDriver: string) => {
     setDriver(newDriver);
+    const targetDriver = drivers.find((d) => d.id === newDriver);
+    const isNet =
+      targetDriver &&
+      targetDriver.capabilities?.file_based === false &&
+      !targetDriver.capabilities?.folder_based;
     setFormData({
       driver: newDriver,
-      host: "",
-      port: drivers.find((d) => d.id === newDriver)?.default_port ?? undefined,
+      host: isNet ? "localhost" : "",
+      port: targetDriver?.default_port ?? (newDriver === "postgres" ? 5432 : newDriver === "mysql" ? 3306 : undefined),
       username: "",
       password: "",
       database: "",
@@ -1946,6 +1965,9 @@ export const NewConnectionModal = ({
         const testParamsBase: Partial<ConnectionParams> = {
           driver,
           ...formData,
+          host:
+            formData.host?.trim() ||
+            (isNetworkDriver && !isUriPassthrough ? "localhost" : formData.host),
           port: formData.port != null ? Number(formData.port) : undefined,
           k8s_port: effectiveK8sPort,
           database: isMultiDb
@@ -1955,7 +1977,7 @@ export const NewConnectionModal = ({
                 (typeof formData.database === "string"
                   ? formData.database
                   : ""))
-            : formData.database,
+            : formData.database || (driver === "postgres" ? "postgres" : formData.database),
         };
         const testParams = withInlineK8sPaths(
           testParamsBase,
@@ -2141,10 +2163,14 @@ export const NewConnectionModal = ({
         (!formData.database ||
           (typeof formData.database === "string" && !formData.database.trim()))
       ) {
-        setStatus("error");
-        setMessage(t("newConnection.dbNameRequired"));
-        setTestResult("error");
-        return;
+        if (driver === "postgres") {
+          formData.database = "postgres";
+        } else {
+          setStatus("error");
+          setMessage(t("newConnection.dbNameRequired"));
+          setTestResult("error");
+          return;
+        }
       }
       if (!validateInlineK8sSelection()) return;
       if (!validateInlineSshSelection()) return;
@@ -2152,6 +2178,9 @@ export const NewConnectionModal = ({
       const paramsBase: Partial<ConnectionParams> = {
         driver,
         ...formData,
+        host:
+          formData.host?.trim() ||
+          (isNetworkDriver && !isUriPassthrough ? "localhost" : formData.host),
         port: formData.port != null ? Number(formData.port) : undefined,
         k8s_port: effectiveK8sPort,
         database: isMultiDb
@@ -2166,7 +2195,7 @@ export const NewConnectionModal = ({
             ? typeof formData.database === "string" && formData.database.trim()
               ? formData.database
               : driver
-            : formData.database,
+            : formData.database || (driver === "postgres" ? "postgres" : formData.database),
       };
       const params = withInlineK8sPaths(paramsBase, inlinePaths.options);
       const appearancePayload =
@@ -2199,6 +2228,7 @@ export const NewConnectionModal = ({
             params,
             detectJsonInTextColumns: detectJsonInTextColumns ? true : null,
             environment: environment || null,
+            read_only: readOnly ? true : null,
           });
           savedConnectionId = initialConnection.id;
           await invoke("set_connection_appearance", {
@@ -2211,6 +2241,7 @@ export const NewConnectionModal = ({
             params,
             detectJsonInTextColumns: detectJsonInTextColumns ? true : null,
             environment: environment || null,
+            read_only: readOnly ? true : null,
           });
           savedConnectionId = saved.id;
           if (appearancePayload) {
@@ -2653,7 +2684,11 @@ export const NewConnectionModal = ({
                   autoComplete="off"
                   spellCheck={false}
                   className="w-full px-3 py-2 bg-base border border-strong rounded-md text-sm text-primary placeholder:text-muted placeholder:italic focus:border-blue-500 focus:outline-none transition-colors"
-                  placeholder={t("newConnection.dbNamePlaceholder")}
+                  placeholder={
+                    driver === "postgres"
+                      ? `${t("newConnection.dbNamePlaceholder")} (default: postgres - shows all databases)`
+                      : t("newConnection.dbNamePlaceholder")
+                  }
                 />
               )}
               {databaseLoadError && (
@@ -2665,7 +2700,7 @@ export const NewConnectionModal = ({
           )}
 
           {/* Keychain */}
-          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+          {!webMode && (<label className="flex items-center gap-2 cursor-pointer select-none w-fit">
             <input
               type="checkbox"
               checked={!!formData.save_in_keychain}
@@ -2677,12 +2712,12 @@ export const NewConnectionModal = ({
             <span className="text-xs text-secondary">
               {t("newConnection.saveKeychain")}
             </span>
-          </label>
+          </label>)}
         </>
       )}
 
       {/* Detect JSON in text columns (per-connection opt-in) */}
-      <label className="flex items-start gap-2 cursor-pointer select-none w-fit">
+      {!webMode && (<label className="flex items-start gap-2 cursor-pointer select-none w-fit">
         <input
           type="checkbox"
           checked={detectJsonInTextColumns}
@@ -2695,7 +2730,30 @@ export const NewConnectionModal = ({
             {t("settings.detectJsonInTextColumnsDesc")}
           </span>
         </span>
-      </label>
+      </label>)}
+
+      {/* Read Only connection (per-connection enforcement) */}
+      {!webMode && (<label className="flex items-start gap-2 cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          checked={readOnly}
+          onChange={(e) => setReadOnly(e.target.checked)}
+          className="accent-amber-500 w-3.5 h-3.5 rounded mt-0.5"
+        />
+        <span className="text-xs text-secondary leading-snug">
+          <span className="flex items-center gap-1.5 font-medium text-primary">
+            <span>{t("newConnection.readOnly", { defaultValue: "Read Only connection" })}</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wide">
+              Protected
+            </span>
+          </span>
+          <span className="block text-muted">
+            {t("newConnection.readOnlyDesc", {
+              defaultValue: "Strict read-only mode: blocks all INSERT, UPDATE, DELETE, DROP, ALTER and data-modifying queries.",
+            })}
+          </span>
+        </span>
+      </label>)}
 
     </div>
   );
@@ -2985,14 +3043,14 @@ export const NewConnectionModal = ({
         <Select
           value={
             formData.ssl_mode ||
-            (driver === "clickhouse"
+            (webMode ? "verify-full" : driver === "clickhouse"
               ? "disable"
               : isPostgresDialect
                 ? "prefer"
                 : "required")
           }
           options={
-            driver === "clickhouse"
+            webMode ? ["disable", "verify-full"] : driver === "clickhouse"
               ? ["disable", "require"]
               : isPostgresDialect
                 ? ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
@@ -3044,7 +3102,7 @@ export const NewConnectionModal = ({
       </div>
 
       {/* SSL Certificate Files */}
-      {formData.ssl_mode && formData.ssl_mode !== "disable" && formData.ssl_mode !== "disabled" && (
+      {!webMode && formData.ssl_mode && formData.ssl_mode !== "disable" && formData.ssl_mode !== "disabled" && (
         <div className="space-y-3 pt-2">
           <p className="text-xs text-muted">
             {t("newConnection.sslCertificatesOptional", {
@@ -3851,10 +3909,10 @@ export const NewConnectionModal = ({
                 autoComplete="off"
                 spellCheck={false}
                 className={clsx(
-                  "flex-1 bg-transparent text-base font-semibold outline-none",
+                  "flex-1 text-base font-semibold outline-none transition-all duration-150 rounded px-2 py-0.5",
                   nameError
-                    ? "text-red-400 placeholder:text-red-400/60"
-                    : "text-primary placeholder:text-muted/50",
+                    ? "bg-red-500/15 border border-red-500/60 text-red-400 placeholder:text-red-400/70 shadow-sm shadow-red-500/20 ring-1 ring-red-500/30"
+                    : "bg-surface-elevated/40 hover:bg-surface-elevated/70 focus:bg-surface-elevated border border-border/40 focus:border-accent text-primary placeholder:text-muted/50",
                 )}
               />
             </>
@@ -4088,7 +4146,7 @@ export const NewConnectionModal = ({
                     | "privacy";
                   label: string;
                 }[]
-              ).map((tab) => (
+              ).filter(tab => !webMode || ["general", "ssl", "appearance"].includes(tab.id)).map((tab) => (
                 <button
                   key={tab.id}
                   data-active={activeTab === tab.id}
@@ -4166,7 +4224,7 @@ export const NewConnectionModal = ({
         {step === "form" && !activeDriverNotInstalled && <div className="border-t border-default bg-base">
           <div className="px-5 py-3 flex items-center gap-3">
           {/* Test button */}
-          <button
+          {!webMode && (<button
             onClick={testConnection}
             disabled={
               isActionPending || status === "testing" || status === "saving"
@@ -4190,7 +4248,7 @@ export const NewConnectionModal = ({
               <Plug size={14} />
             )}
             {t("newConnection.testConnection")}
-          </button>
+          </button>)}
 
           {/* Stop button (only while a test is running) */}
           {status === "testing" && (

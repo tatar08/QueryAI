@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles, BookOpen, ChevronUp } from "lucide-react";
+import { Sparkles, BookOpen, Zap, ChevronUp } from "lucide-react";
 
 interface AiDropdownButtonProps {
   onGenerate: () => void;
   onExplain: () => void;
+  onImprove?: () => void;
   disableAll?: boolean;
   disableExplain?: boolean;
   compact?: boolean;
@@ -13,6 +14,7 @@ interface AiDropdownButtonProps {
 export function AiDropdownButton({
   onGenerate,
   onExplain,
+  onImprove,
   disableAll,
   disableExplain,
   compact,
@@ -55,7 +57,7 @@ export function AiDropdownButton({
                 onGenerate();
                 setIsOpen(false);
               }}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-secondary hover:bg-purple-900/30 hover:text-purple-300 w-full text-left transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-secondary hover:bg-purple-900/30 hover:text-purple-300 w-full text-left transition-colors cursor-pointer"
             >
               <Sparkles size={12} className="text-purple-400" />
               {t("ai.generateSql")}
@@ -67,10 +69,22 @@ export function AiDropdownButton({
                 setIsOpen(false);
               }}
               disabled={disableExplain}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-secondary hover:bg-blue-900/30 hover:text-blue-300 w-full text-left transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-secondary hover:bg-blue-900/30 hover:text-blue-300 w-full text-left transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
             >
               <BookOpen size={12} className="text-blue-400" />
               {t("ai.explain")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onImprove?.();
+                setIsOpen(false);
+              }}
+              disabled={disableExplain}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-secondary hover:bg-emerald-900/30 hover:text-emerald-300 w-full text-left transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            >
+              <Zap size={12} className="text-emerald-400" />
+              {t("ai.improveQuery", { defaultValue: "Improve Query" })}
             </button>
           </div>
         </>

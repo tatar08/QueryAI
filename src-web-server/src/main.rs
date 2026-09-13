@@ -14,11 +14,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let config = AppConfig::from_env()?;
+    config.secrets.key_manager()?;
     let metadata = MetadataStore::connect(
         &config.metadata_database_url,
         config.metadata_max_connections,
     )
     .await?;
+    let state = AppState::from_config(metadata, &config).await?;
+
     let listener = tokio::net::TcpListener::bind(config.bind_address).await?;
 
     tracing::info!(
@@ -27,16 +30,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "Tabularis web server listening"
     );
 
-    axum::serve(
-        listener,
-        tabularis_web_server::app(AppState::with_auth_settings(
-            metadata,
-            config.session_ttl_seconds,
-            config.session_cookie_secure,
-        )),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    axum::serve(listener, tabularis_web_server::app(state))
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }

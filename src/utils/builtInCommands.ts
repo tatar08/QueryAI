@@ -56,6 +56,62 @@ export function createBuiltInCommandItems(
         execute: () => scope.runtime.navigate("/connections"),
       },
     },
+    {
+      id: "app.open-design-system",
+      title: "UI Design System & Visual Identity",
+      group: labels.navigationCategory,
+      keywords: ["design", "system", "tokens", "components", "contributors", "colors", "style", "195"],
+      icon: "command",
+      primaryAction: {
+        id: "app.open-design-system",
+        label: "Open Design System",
+        execute: () => {
+          window.dispatchEvent(new CustomEvent("open-design-system"));
+        },
+      },
+    },
+    {
+      id: "app.open-postgres-tools",
+      title: "PostgreSQL Tools & Activity Monitor",
+      group: labels.navigationCategory,
+      keywords: ["postgres", "postgresql", "activity", "stat", "extensions", "maintenance", "vacuum", "16"],
+      icon: "command",
+      primaryAction: {
+        id: "app.open-postgres-tools",
+        label: "Open PostgreSQL Tools",
+        execute: () => {
+          window.dispatchEvent(new CustomEvent("open-postgres-tools"));
+        },
+      },
+    },
+    {
+      id: "app.open-sqlite-tools",
+      title: "SQLite Tools & PRAGMA Manager",
+      group: labels.navigationCategory,
+      keywords: ["sqlite", "pragma", "vacuum", "integrity", "wal", "optimize", "17"],
+      icon: "command",
+      primaryAction: {
+        id: "app.open-sqlite-tools",
+        label: "Open SQLite Tools",
+        execute: () => {
+          window.dispatchEvent(new CustomEvent("open-sqlite-tools"));
+        },
+      },
+    },
+    {
+      id: "app.open-pin-auth",
+      title: "Web PIN & JWT Authentication (ลงทะเบียน / เข้าสู่ระบบ)",
+      group: labels.navigationCategory,
+      keywords: ["auth", "pin", "jwt", "login", "register", "token", "password", "security"],
+      icon: "command",
+      primaryAction: {
+        id: "app.open-pin-auth",
+        label: "Open PIN Auth",
+        execute: () => {
+          window.dispatchEvent(new CustomEvent("open-pin-auth"));
+        },
+      },
+    },
   ];
 
   if (scope.connectionId) {

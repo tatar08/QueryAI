@@ -246,6 +246,7 @@ mod tests {
             appearance: None,
             tag_ids: None,
             environment: None,
+            read_only: None,
         }
     }
 

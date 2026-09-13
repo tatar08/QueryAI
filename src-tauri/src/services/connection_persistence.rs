@@ -28,6 +28,7 @@ pub struct SaveConnectionInput {
     pub params: ConnectionParams,
     pub detect_json_in_text_columns: Option<bool>,
     pub environment: Option<String>,
+    pub read_only: Option<bool>,
 }
 
 pub struct UpdateConnectionInput {
@@ -36,6 +37,7 @@ pub struct UpdateConnectionInput {
     pub params: ConnectionParams,
     pub detect_json_in_text_columns: Option<bool>,
     pub environment: Option<String>,
+    pub read_only: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -178,6 +180,7 @@ pub fn persist_new_connection(
         persisted_params,
         input.detect_json_in_text_columns,
         environment,
+        input.read_only,
     );
     file.connections.push(connection.clone());
     persist_connection_uri_change(
@@ -233,6 +236,7 @@ pub fn persist_updated_connection(
         persisted_params,
         input.detect_json_in_text_columns,
         environment,
+        input.read_only,
     );
     file.connections[index] = updated.clone();
     persist_connection_uri_change(

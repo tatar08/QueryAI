@@ -225,6 +225,7 @@ fn build_connection(
         appearance: None,
         tag_ids: None,
         environment: None,
+        read_only: None,
     };
     (saved, ssh_record)
 }

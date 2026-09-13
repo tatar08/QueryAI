@@ -6,6 +6,7 @@ pub fn create_saved_connection(
     params: ConnectionParams,
     detect_json_in_text_columns: Option<bool>,
     environment: Option<String>,
+    read_only: Option<bool>,
 ) -> SavedConnection {
     SavedConnection {
         id,
@@ -17,6 +18,7 @@ pub fn create_saved_connection(
         appearance: None,
         tag_ids: None,
         environment,
+        read_only,
     }
 }
 
@@ -26,6 +28,7 @@ pub fn update_saved_connection(
     params: ConnectionParams,
     detect_json_in_text_columns: Option<bool>,
     environment: Option<String>,
+    read_only: Option<bool>,
 ) -> SavedConnection {
     SavedConnection {
         id: existing.id.clone(),
@@ -37,6 +40,7 @@ pub fn update_saved_connection(
         appearance: existing.appearance.clone(),
         tag_ids: existing.tag_ids.clone(),
         environment,
+        read_only: read_only.or(existing.read_only),
     }
 }
 

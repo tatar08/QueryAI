@@ -13,6 +13,8 @@ import {
   Network,
   Search,
   X,
+  Zap,
+  BarChart3,
 } from "lucide-react";
 import { Accordion } from "./Accordion";
 import { MetadataErrorIndicator } from "./MetadataErrorIndicator";
@@ -65,6 +67,10 @@ interface SidebarDatabaseItemProps {
   onImport?: (database: string) => void;
   onViewDiagram?: (database: string) => void;
   capabilities?: DriverCapabilities | null;
+  isActive?: boolean;
+  onNewQuery?: (database: string) => void;
+  onCompare?: (database: string) => void;
+  onSwitchDatabase?: (database: string) => void;
 }
 
 export const SidebarDatabaseItem = ({
@@ -97,10 +103,16 @@ export const SidebarDatabaseItem = ({
   onImport,
   onViewDiagram,
   capabilities,
+  isActive,
+  onNewQuery,
+  onCompare,
+  onSwitchDatabase,
 }: SidebarDatabaseItemProps) => {
   const { t } = useTranslation();
 
-  const [isExpanded, setIsExpanded] = useState(activeSchema === databaseName);
+  const isItemActive = isActive || activeSchema === databaseName;
+
+  const [isExpanded, setIsExpanded] = useState(isItemActive);
   const [prevActiveSchema, setPrevActiveSchema] = useState(activeSchema);
   const [tablesOpen, setTablesOpen] = useState(true);
   const [viewsOpen, setViewsOpen] = useState(true);
@@ -121,13 +133,10 @@ export const SidebarDatabaseItem = ({
   const isLoading = databaseData?.isLoading ?? false;
   const isLoaded = databaseData?.isLoaded ?? false;
 
-  // Auto-expand this database when it becomes the active one, e.g. after
-  // picking a table from the Quick Navigator. Mirrors SidebarSchemaItem; done
-  // during render (same-component setState) so the table item is mounted in
-  // time for the scroll-into-view in ExplorerSidebar.
+  // Auto-expand this database when it becomes the active one
   if (activeSchema !== prevActiveSchema) {
     setPrevActiveSchema(activeSchema);
-    if (activeSchema === databaseName) {
+    if (activeSchema === databaseName || isActive) {
       setIsExpanded(true);
     }
   }
@@ -147,16 +156,27 @@ export const SidebarDatabaseItem = ({
     setIsExpanded((current) => !current);
   };
 
+  const handleHeaderClick = () => {
+    if (!isItemActive && onSwitchDatabase) {
+      onSwitchDatabase(databaseName);
+    }
+    handleToggle();
+  };
+
   const itemCount = isLoaded
     ? formatObjectCount(tables.length, views.length, routines.length, triggers.length)
     : "";
 
   return (
     <div className="flex flex-col">
-      {/* Database header */}
+      {/* Database header with Option 1 Neon Accent */}
       <div
-        className="flex items-center justify-between px-2 py-1.5 group/db cursor-pointer hover:bg-surface-secondary transition-colors"
-        onClick={handleToggle}
+        className={`flex items-center justify-between px-2.5 py-1.5 group/db cursor-pointer transition-all duration-150 rounded-r-lg ${
+          isItemActive
+            ? "bg-cyan-500/10 border-l-2 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.12)] font-medium"
+            : "hover:bg-surface-secondary/70 text-secondary border-l-2 border-transparent"
+        }`}
+        onClick={handleHeaderClick}
         onContextMenu={(e) => {
           e.preventDefault();
           onContextMenu(e, "database", databaseName, databaseName);
@@ -164,61 +184,116 @@ export const SidebarDatabaseItem = ({
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {isExpanded ? (
-            <ChevronDown size={14} className="text-muted shrink-0" />
+            <ChevronDown
+              size={14}
+              className={isItemActive ? "text-cyan-400 shrink-0" : "text-muted shrink-0"}
+            />
           ) : (
-            <ChevronRight size={14} className="text-muted shrink-0" />
+            <ChevronRight
+              size={14}
+              className={isItemActive ? "text-cyan-400 shrink-0" : "text-muted shrink-0"}
+            />
           )}
           <Database
             size={14}
             className={
-              activeSchema === databaseName
-                ? "text-blue-400 shrink-0"
-                : "text-muted group-hover/db:text-blue-400 shrink-0"
+              isItemActive
+                ? "text-cyan-400 shrink-0 filter drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]"
+                : "text-muted group-hover/db:text-blue-400 shrink-0 transition-colors"
             }
           />
-          <span className="text-sm font-medium text-secondary truncate">
+          <span
+            className={`text-sm truncate ${
+              isItemActive ? "font-semibold text-cyan-100" : "font-medium text-secondary"
+            }`}
+          >
             {databaseName}
           </span>
-          {isLoaded && (
+          {isItemActive && (
+            <span className="ml-1.5 inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+              <span className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse" />
+              ACTIVE
+            </span>
+          )}
+          {isLoaded && !isItemActive && (
             <span className="ml-1 text-[10px] text-muted opacity-60 shrink-0">
               {itemCount}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
+
+        {/* Hover Action Dock */}
+        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover/db:opacity-100 transition-opacity">
+          {onNewQuery && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewQuery(databaseName);
+              }}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 hover:text-blue-300 transition-colors"
+              title="New Query for this Database"
+            >
+              <Zap size={10} />
+              <span>SQL</span>
+            </button>
+          )}
+          {onCompare && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompare(databaseName);
+              }}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 hover:text-amber-300 transition-colors"
+              title="Compare Database"
+            >
+              <BarChart3 size={10} />
+            </button>
+          )}
           {onImport && (
             <button
-              onClick={(e) => { e.stopPropagation(); onImport(databaseName); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onImport(databaseName);
+              }}
               className="p-1 rounded hover:bg-surface-secondary text-muted hover:text-green-400 transition-colors"
               title={t("dump.importDatabase")}
             >
-              <Upload size={13} />
+              <Upload size={12} />
             </button>
           )}
           {onDump && (
             <button
-              onClick={(e) => { e.stopPropagation(); onDump(databaseName); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDump(databaseName);
+              }}
               className="p-1 rounded hover:bg-surface-secondary text-muted hover:text-blue-400 transition-colors"
               title={t("dump.dumpDatabase")}
             >
-              <Download size={13} />
+              <Download size={12} />
             </button>
           )}
           {onViewDiagram && (
             <button
-              onClick={(e) => { e.stopPropagation(); onViewDiagram(databaseName); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDiagram(databaseName);
+              }}
               className="p-1 rounded hover:bg-surface-secondary text-muted hover:text-orange-400 transition-colors"
               title={t("sidebar.viewERDiagram")}
             >
-              <Network size={13} className="rotate-90" />
+              <Network size={12} className="rotate-90" />
             </button>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); onRefreshDatabase(databaseName); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefreshDatabase(databaseName);
+            }}
             className="p-1 rounded hover:bg-surface-secondary text-muted hover:text-primary transition-colors"
             title={t("sidebar.refreshTables")}
           >
-            <RefreshCw size={13} />
+            <RefreshCw size={12} />
           </button>
         </div>
       </div>

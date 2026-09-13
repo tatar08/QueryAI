@@ -29,6 +29,7 @@ export interface HttpTransportOptions {
   baseUrl?: string;
   fetchImplementation?: typeof fetch;
   getCsrfToken?: () => string | undefined;
+  getWorkspaceId?: () => string | undefined;
 }
 
 export class HttpTransportError extends Error {
@@ -79,38 +80,65 @@ export class HttpTransport implements BackendTransport {
   private readonly baseUrl: string;
   private readonly fetchImplementation: typeof fetch;
   private readonly getCsrfToken?: () => string | undefined;
+  private readonly getWorkspaceId?: () => string | undefined;
 
   constructor(options: HttpTransportOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '');
     this.fetchImplementation = options.fetchImplementation ?? fetch;
     this.getCsrfToken = options.getCsrfToken;
+    this.getWorkspaceId = options.getWorkspaceId;
+  }
+
+  private getWorkspacePrefix(): string | undefined {
+    const wsId = this.getWorkspaceId?.();
+    return wsId ? `/api/v1/workspaces/${encodeURIComponent(wsId)}` : undefined;
   }
 
   async listConnections(): Promise<SavedConnection[]> {
-    const response = await this.request('/api/v1/connections', {
+    const prefix = this.getWorkspacePrefix();
+    const endpoint = prefix ? `${prefix}/connections` : '/api/v1/connections';
+    const response = await this.request(endpoint, {
       method: 'GET',
     });
     return response.json() as Promise<SavedConnection[]>;
   }
 
   async listConnectionCatalogue(): Promise<ConnectionsFile> {
-    const response = await this.request(
-      '/api/v1/connections?include=groups',
-      { method: 'GET' },
-    );
-    return response.json() as Promise<ConnectionsFile>;
+    const prefix = this.getWorkspacePrefix();
+    const endpoint = prefix
+      ? `${prefix}/connections`
+      : '/api/v1/connections?include=groups';
+    const response = await this.request(endpoint, {
+      method: 'GET',
+    });
+    const data = await response.json();
+    if (prefix && Array.isArray(data)) {
+      return { connections: data, groups: [] };
+    }
+    return data as ConnectionsFile;
   }
 
   async testSavedConnection({
     connection,
   }: TestSavedConnectionOptions): Promise<void> {
-    await this.request(
-      `/api/v1/connections/${encodeURIComponent(connection.id)}/test`,
-      { method: 'POST' },
-    );
+    const prefix = this.getWorkspacePrefix();
+    const endpoint = prefix
+      ? `${prefix}/connections/${encodeURIComponent(connection.id)}/schema?resource=schemas`
+      : `/api/v1/connections/${encodeURIComponent(connection.id)}/test`;
+    await this.request(endpoint, {
+      method: prefix ? 'GET' : 'POST',
+    });
   }
 
   async listAvailableDatabases(connectionId: string): Promise<string[]> {
+    const prefix = this.getWorkspacePrefix();
+    if (prefix) {
+      const items = await this.listSchemaResource<{ name: string }>(
+        connectionId,
+        'databases',
+      );
+      return items.map((i) => i.name ?? (i as unknown as string));
+    }
     const response = await this.request(
       `/api/v1/connections/${encodeURIComponent(connectionId)}/databases`,
       { method: 'GET' },
@@ -169,10 +197,11 @@ export class HttpTransport implements BackendTransport {
   ): Promise<T[]> {
     const query = new URLSearchParams({ resource });
     if (schema !== undefined) query.set('schema', schema);
-    const response = await this.request(
-      `/api/v1/connections/${encodeURIComponent(connectionId)}/schema?${query.toString()}`,
-      { method: 'GET' },
-    );
+    const prefix = this.getWorkspacePrefix();
+    const endpoint = prefix
+      ? `${prefix}/connections/${encodeURIComponent(connectionId)}/schema?${query.toString()}`
+      : `/api/v1/connections/${encodeURIComponent(connectionId)}/schema?${query.toString()}`;
+    const response = await this.request(endpoint, { method: 'GET' });
     return response.json() as Promise<T[]>;
   }
 

@@ -163,6 +163,10 @@ describe("CommandPaletteProvider", () => {
       "table.count-rows",
       "app.open-settings",
       "app.open-connections",
+      "app.open-design-system",
+      "app.open-postgres-tools",
+      "app.open-sqlite-tools",
+      "app.open-pin-auth",
       "connection.new-console",
     ]);
   });

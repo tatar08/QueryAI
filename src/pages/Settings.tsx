@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Settings as SettingsIcon,
@@ -14,9 +15,11 @@ import {
   Cable,
   Archive,
   EyeOff,
+  User,
 } from "lucide-react";
 import clsx from "clsx";
 import { ConfigJsonModal } from "../components/modals/ConfigJsonModal";
+import { ProfileTab } from "../components/settings/ProfileTab";
 import { GeneralTab } from "../components/settings/GeneralTab";
 import { PrivacyTab } from "../components/settings/PrivacyTab";
 import { AppearanceTab } from "../components/settings/AppearanceTab";
@@ -29,11 +32,15 @@ import { SshTab } from "../components/settings/SshTab";
 import { BackupTab } from "../components/settings/BackupTab";
 import { AiActivityPanel } from "../components/settings/AiActivityPanel";
 import { InfoTab } from "../components/settings/InfoTab";
+import { RolesPermissionsTab } from "../components/settings/RolesPermissionsTab";
 import { PluginSettingsPage } from "../components/settings/PluginSettingsPage";
 import { useDrivers } from "../hooks/useDrivers";
 import { useSettings } from "../hooks/useSettings";
+import { useWorkspace } from "../contexts/WorkspaceContext";
 
 type SettingsTab =
+  | "profile"
+  | "roles"
   | "general"
   | "privacy"
   | "ssh"
@@ -59,6 +66,8 @@ const TAB_ITEMS: Array<{
   icon: React.ComponentType<{ size: number }>;
   labelKey: string;
 }> = [
+  { id: "profile", icon: User, labelKey: "settings.profile" },
+  { id: "roles", icon: Shield, labelKey: "settings.rolesPermissions" },
   { id: "general", icon: SettingsIcon, labelKey: "settings.general" },
   { id: "ssh", icon: Cable, labelKey: "sshConnections.title" },
   { id: "backup", icon: Archive, labelKey: "settings.backup.title" },
@@ -74,6 +83,8 @@ const TAB_ITEMS: Array<{
 ];
 
 const TAB_COMPONENTS: Partial<Record<SettingsTab, React.ComponentType>> = {
+  profile: ProfileTab,
+  roles: RolesPermissionsTab,
   general: GeneralTab,
   privacy: PrivacyTab,
   ssh: SshTab,
@@ -90,6 +101,8 @@ const TAB_COMPONENTS: Partial<Record<SettingsTab, React.ComponentType>> = {
 
 export const Settings = () => {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as SettingsTab | null;
   const {
     allDrivers,
     installedPlugins,
@@ -98,7 +111,11 @@ export const Settings = () => {
   const { settings } = useSettings();
   const activeExternalDrivers =
     settings.activeExternalDrivers ?? installedPlugins.map((p) => p.id);
-  const [requestedTab, setRequestedTab] = useState<SettingsTab>("general");
+  const [requestedTab, setRequestedTab] = useState<SettingsTab>(
+    tabParam && (tabParam === "profile" || TAB_ITEMS.some((t) => t.id === tabParam))
+      ? tabParam
+      : "profile",
+  );
   const [isConfigJsonModalOpen, setIsConfigJsonModalOpen] = useState(false);
   const [pluginSidebarOverrides, setPluginSidebarOverrides] = useState<
     Record<string, string | null>
@@ -170,6 +187,14 @@ export const Settings = () => {
       ? "plugins"
       : requestedTab;
   const ActiveComponent = TAB_COMPONENTS[activeTab];
+  const { effectiveRole } = useWorkspace();
+  const visibleTabItems = TAB_ITEMS.filter((item) => {
+    if (item.id === "roles") {
+      return effectiveRole === "owner" || effectiveRole === "admin";
+    }
+    return true;
+  });
+
   const activePluginId = activeTab.startsWith("plugin:")
     ? activeTab.slice("plugin:".length)
     : null;
@@ -179,20 +204,29 @@ export const Settings = () => {
       {/* Sidebar */}
       <nav className="w-52 flex flex-col border-r border-default bg-elevated shrink-0">
         <div className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
-          {TAB_ITEMS.map(({ id, icon: Icon, labelKey }) => (
+          {visibleTabItems.map(({ id, icon: Icon, labelKey }) => (
             <div key={id} className="space-y-1">
               <button
-                onClick={() => setRequestedTab(id)}
+                onClick={() => {
+                  setRequestedTab(id);
+                  setSearchParams({ tab: id });
+                }}
                 className={clsx(
                   "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left",
                   activeTab === id ||
                     (id === "plugins" && activePluginId !== null)
-                    ? "bg-surface-secondary text-primary"
+                    ? "bg-surface-secondary text-primary font-semibold"
                     : "text-muted hover:text-primary hover:bg-surface-secondary/50",
                 )}
               >
                 <Icon size={16} />
-                <span className="truncate">{t(labelKey)}</span>
+                <span className="truncate">
+                  {id === "profile"
+                    ? t("settings.profile", { defaultValue: "User Profile" })
+                    : id === "roles"
+                    ? t("settings.rolesPermissions", { defaultValue: "Roles & Permissions" })
+                    : t(labelKey)}
+                </span>
                 {id === "plugins" && pluginTabs.length > 0 && (
                   <span className="ml-auto rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/20">
                     {pluginTabs.length}

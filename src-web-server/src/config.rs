@@ -1,3 +1,5 @@
+pub mod secrets;
+use secrets::RuntimeSecrets;
 use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
@@ -10,6 +12,8 @@ const DEFAULT_METADATA_MAX_CONNECTIONS: u32 = 10;
 const DEFAULT_SESSION_TTL_SECONDS: i32 = 8 * 60 * 60;
 const MIN_SESSION_TTL_SECONDS: i32 = 5 * 60;
 const MAX_SESSION_TTL_SECONDS: i32 = 30 * 24 * 60 * 60;
+const DEFAULT_RATE_LIMIT_PER_MINUTE: u32 = 120;
+const DEFAULT_RATE_LIMIT_BURST: u32 = 30;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeploymentMode {
@@ -39,14 +43,18 @@ impl std::fmt::Debug for OidcConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
+    pub secrets: RuntimeSecrets,
     pub bind_address: SocketAddr,
     pub deployment_mode: DeploymentMode,
     pub metadata_database_url: String,
     pub metadata_max_connections: u32,
     pub public_origin: String,
+    pub allowed_origins: Vec<String>,
     pub oidc: Option<OidcConfig>,
     pub session_ttl_seconds: i32,
     pub session_cookie_secure: bool,
+    pub rate_limit_per_minute: u32,
+    pub rate_limit_burst: u32,
 }
 
 impl AppConfig {
@@ -166,15 +174,66 @@ impl AppConfig {
             );
         }
 
+        let allowed_origins = if let Some(origins_str) = values.get("TABULARIS_ALLOWED_ORIGINS") {
+            let list: Vec<String> = origins_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if list.is_empty() {
+                vec![public_origin.clone()]
+            } else {
+                list
+            }
+        } else {
+            vec![public_origin.clone()]
+        };
+
+        if deployment_mode == DeploymentMode::Production {
+            for origin in &allowed_origins {
+                if !origin.starts_with("https://") {
+                    return Err(format!(
+                        "Allowed origin '{origin}' must use https:// in production"
+                    ));
+                }
+            }
+        }
+
+        let rate_limit_per_minute = values
+            .get("TABULARIS_RATE_LIMIT_PER_MINUTE")
+            .map(|value| value.parse::<u32>())
+            .transpose()
+            .map_err(|error| format!("Invalid TABULARIS_RATE_LIMIT_PER_MINUTE: {error}"))?
+            .unwrap_or(DEFAULT_RATE_LIMIT_PER_MINUTE);
+        if !(1..=10000).contains(&rate_limit_per_minute) {
+            return Err("TABULARIS_RATE_LIMIT_PER_MINUTE must be between 1 and 10000".to_string());
+        }
+
+        let rate_limit_burst = values
+            .get("TABULARIS_RATE_LIMIT_BURST")
+            .map(|value| value.parse::<u32>())
+            .transpose()
+            .map_err(|error| format!("Invalid TABULARIS_RATE_LIMIT_BURST: {error}"))?
+            .unwrap_or(DEFAULT_RATE_LIMIT_BURST);
+        if !(1..=1000).contains(&rate_limit_burst) {
+            return Err("TABULARIS_RATE_LIMIT_BURST must be between 1 and 1000".to_string());
+        }
+
+        let secrets =
+            RuntimeSecrets::parse(&values, deployment_mode == DeploymentMode::Production)?;
         Ok(Self {
+            secrets,
             bind_address,
             deployment_mode,
             metadata_database_url,
             metadata_max_connections,
             public_origin,
+            allowed_origins,
             oidc,
             session_ttl_seconds,
             session_cookie_secure: deployment_mode == DeploymentMode::Production,
+            rate_limit_per_minute,
+            rate_limit_burst,
         })
     }
 }

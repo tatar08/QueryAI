@@ -173,6 +173,22 @@ export function AppearanceTab() {
           </SettingSection>
 
           <ResultColorsSection />
+
+          <SettingSection title="UI Design System & Visual Identity">
+            <div className="p-4 bg-base/50 border border-default rounded-xl flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-primary">Design System & Contributor Showcase</h4>
+                <p className="text-xs text-secondary mt-0.5">Explore design tokens, standard component primitives, and visual guidelines.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-design-system"))}
+                className="px-3.5 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <span>Open Design System</span>
+              </button>
+            </div>
+          </SettingSection>
         </>
       )}
 

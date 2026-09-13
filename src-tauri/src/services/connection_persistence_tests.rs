@@ -137,6 +137,7 @@ fn saved_connection(id: &str, driver: &str, uri_in_keychain: bool) -> SavedConne
         appearance: None,
         tag_ids: Some(vec!["tag-1".to_string()]),
         environment: Some("development".to_string()),
+        read_only: None,
     }
 }
 
@@ -164,6 +165,7 @@ fn save_uses_repository_and_credential_interfaces() {
             params,
             detect_json_in_text_columns: Some(true),
             environment: Some("production".to_string()),
+            read_only: Some(false),
         },
     )
     .expect("save should succeed");
@@ -204,6 +206,7 @@ fn save_rejects_plaintext_connection_uri() {
             },
             detect_json_in_text_columns: None,
             environment: None,
+            read_only: None,
         },
     )
     .unwrap_err();
@@ -225,6 +228,7 @@ fn save_rejects_an_unknown_environment() {
             params: ConnectionParams::default(),
             detect_json_in_text_columns: None,
             environment: Some("sandbox".to_string()),
+            read_only: None,
         },
     )
     .unwrap_err();
@@ -269,6 +273,7 @@ fn update_preserves_an_untouched_uri_and_collection_metadata() {
             },
             detect_json_in_text_columns: Some(true),
             environment: Some("staging".to_string()),
+            read_only: None,
         },
     )
     .expect("update should succeed");
@@ -315,6 +320,7 @@ fn update_clears_a_uri_when_the_driver_changes() {
             },
             detect_json_in_text_columns: None,
             environment: None,
+            read_only: None,
         },
     )
     .expect("update should succeed");
@@ -356,6 +362,7 @@ fn failed_persistence_rolls_back_the_connection_uri() {
             },
             detect_json_in_text_columns: None,
             environment: None,
+            read_only: None,
         },
     )
     .unwrap_err();

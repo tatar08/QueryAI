@@ -414,6 +414,8 @@
   },
   "settings": {
     "title": "Settings",
+    "profile": "User Profile",
+    "rolesPermissions": "Roles & Permissions",
     "general": "General",
     "privacy": "Privacy",
     "columnMasking": "Column masking",
@@ -894,6 +896,7 @@
   "ai": {
     "assist": "AI Assist",
     "explain": "Explain",
+    "improveQuery": "Improve Query",
     "generateSql": "Generate SQL",
     "generating": "Generating...",
     "explainQuery": "AI Query Explanation",

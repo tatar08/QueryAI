@@ -1,0 +1,89 @@
+name: tabularis-production
+
+services:
+  # ---------------------------------------------------------------------------
+  # Metadata Database (PostgreSQL 16)
+  # ---------------------------------------------------------------------------
+  metadata-db:
+    image: postgres:16-alpine
+    container_name: tabularis-metadata-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TABULARIS_DB_USER:-tabularis}
+      POSTGRES_PASSWORD: ${TABULARIS_DB_PASSWORD:-Tabularis_Prod_Secret_2026!}
+      POSTGRES_DB: ${TABULARIS_DB_NAME:-tabularis}
+    volumes:
+      - metadata_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TABULARIS_DB_USER:-tabularis} -d ${TABULARIS_DB_NAME:-tabularis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tabularis-internal
+
+  # ---------------------------------------------------------------------------
+  # Tabularis Web Server (Rust / Axum API)
+  # ---------------------------------------------------------------------------
+  web-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: tabularis-web-server
+    restart: unless-stopped
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+    environment:
+      TABULARIS_ENVIRONMENT: production
+      TABULARIS_BIND_ADDRESS: 0.0.0.0:3000
+      TABULARIS_PUBLIC_ORIGIN: ${TABULARIS_PUBLIC_ORIGIN:-https://localhost}
+      TABULARIS_ALLOWED_ORIGINS: ${TABULARIS_ALLOWED_ORIGINS:-https://localhost}
+      TABULARIS_METADATA_DATABASE_URL: postgres://${TABULARIS_DB_USER:-tabularis}:${TABULARIS_DB_PASSWORD:-Tabularis_Prod_Secret_2026!}@metadata-db:5432/${TABULARIS_DB_NAME:-tabularis}
+      TABULARIS_METADATA_MAX_CONNECTIONS: ${TABULARIS_DB_MAX_CONNECTIONS:-20}
+      TABULARIS_SESSION_TTL_SECONDS: ${TABULARIS_SESSION_TTL_SECONDS:-28800}
+      TABULARIS_RATE_LIMIT_PER_MINUTE: ${TABULARIS_RATE_LIMIT_PER_MINUTE:-120}
+      TABULARIS_RATE_LIMIT_BURST: ${TABULARIS_RATE_LIMIT_BURST:-30}
+      # OIDC Authentication
+      TABULARIS_OIDC_ISSUER_URL: ${TABULARIS_OIDC_ISSUER_URL}
+      TABULARIS_OIDC_CLIENT_ID: ${TABULARIS_OIDC_CLIENT_ID}
+      TABULARIS_OIDC_CLIENT_SECRET: ${TABULARIS_OIDC_CLIENT_SECRET}
+      TABULARIS_OIDC_REDIRECT_URI: ${TABULARIS_OIDC_REDIRECT_URI}
+      # Master Encryption Keys
+      TABULARIS_JWT_SECRET: ${TABULARIS_JWT_SECRET:?Set a base64-encoded random 32-byte signing key}
+      TABULARIS_MASTER_KEY: ${TABULARIS_MASTER_KEY:?Set a base64-encoded random 32-byte encryption key}
+      TABULARIS_MASTER_KEY_VERSION: ${TABULARIS_MASTER_KEY_VERSION:-1}
+      TABULARIS_HISTORICAL_MASTER_KEYS: ${TABULARIS_HISTORICAL_MASTER_KEYS:-}
+    networks:
+      - tabularis-internal
+    expose:
+      - "3000"
+
+  # ---------------------------------------------------------------------------
+  # HTTPS Reverse Proxy (Caddy)
+  # ---------------------------------------------------------------------------
+  proxy:
+    image: caddy:2-alpine
+    container_name: tabularis-proxy
+    restart: unless-stopped
+    depends_on:
+      - web-server
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - tabularis-internal
+
+networks:
+  tabularis-internal:
+    driver: bridge
+
+volumes:
+  metadata_data:
+  caddy_data:
+  caddy_config:

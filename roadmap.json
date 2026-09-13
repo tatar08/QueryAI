@@ -31,12 +31,12 @@
   },
   {
     "label": "UI design system & visual identity — call for contributors",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/195"
   },
   {
     "label": "SQL Server driver — implementation roadmap & call for contributors",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/150"
   },
   {
@@ -46,32 +46,42 @@
   },
   {
     "label": "Command Palette",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/25"
   },
   {
     "label": "SQL Formatting / Prettier",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/23"
   },
   {
+    "label": "Data Transfer Wizard (Cross-database & table-to-table export)",
+    "done": true,
+    "url": "https://github.com/TabularisDB/tabularis"
+  },
+  {
     "label": "Data Compare / Diff Tool",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/21"
   },
   {
+    "label": "MongoDB Driver & Query Support",
+    "done": true,
+    "url": "https://github.com/TabularisDB/tabularis"
+  },
+  {
     "label": "Team Collaboration",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/20"
   },
   {
     "label": "Better SQLite Support",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/17"
   },
   {
     "label": "Better PostgreSQL Support",
-    "done": false,
+    "done": true,
     "url": "https://github.com/TabularisDB/tabularis/issues/16"
   }
 ]

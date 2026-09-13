@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { Shield, PlugZap, Check } from 'lucide-react';
+import { Shield, PlugZap, Check, Lock, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type { SavedConnection } from '../../contexts/DatabaseContext';
@@ -127,6 +127,11 @@ export const ConnectionCard = ({
               {conn.params.driver}
             </span>
             <EnvironmentBadge environment={conn.environment} />
+            {conn.read_only && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-md">
+                <Lock size={9} /> Read Only
+              </span>
+            )}
             <TagChips tagIds={conn.tag_ids} tags={tags} />
             {conn.params.ssh_enabled && (
               <span className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 rounded-md">
@@ -136,6 +141,11 @@ export const ConnectionCard = ({
             {conn.params.k8s_enabled && (
               <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-0.5 rounded-md">
                 <Shield size={8} /> K8s
+              </span>
+            )}
+            {conn.is_shared && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-blue-400 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded-md">
+                <Users size={9} /> Team
               </span>
             )}
             {!isDriverEnabled && (

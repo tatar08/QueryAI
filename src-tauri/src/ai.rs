@@ -40,6 +40,20 @@ pub struct AiTabRenameRequest {
     pub query: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AiChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AiChatRequest {
+    pub provider: String,
+    pub model: String,
+    pub messages: Vec<AiChatMessage>,
+    pub schema: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AiSuggestTableNameRequest {
     pub provider: String,
@@ -504,6 +518,11 @@ pub async fn explain_ai_query(app: AppHandle, req: AiExplainRequest) -> Result<S
 }
 
 #[tauri::command]
+pub async fn improve_ai_query(app: AppHandle, req: AiExplainRequest) -> Result<String, String> {
+    improve_query(app, req).await
+}
+
+#[tauri::command]
 pub async fn analyze_ai_explain_plan(
     app: AppHandle,
     req: AiExplainRequest,
@@ -514,6 +533,11 @@ pub async fn analyze_ai_explain_plan(
 #[tauri::command]
 pub async fn generate_cell_name(app: AppHandle, req: AiCellNameRequest) -> Result<String, String> {
     generate_cellname(app, req).await
+}
+
+#[tauri::command]
+pub async fn chat_ai(app: AppHandle, req: AiChatRequest) -> Result<String, String> {
+    handle_chat_ai(app, req).await
 }
 
 // --- Shared helpers ---
@@ -631,6 +655,46 @@ pub async fn explain_query(app: AppHandle, mut req: AiExplainRequest) -> Result<
             req.model
         ),
         Err(e) => log::error!("Query explanation generation failed: {}", e),
+    }
+
+    result
+}
+
+pub async fn improve_query(app: AppHandle, mut req: AiExplainRequest) -> Result<String, String> {
+    log::info!("Improving query using AI provider: {}", req.provider);
+
+    let app_config = config::load_config_internal(&app);
+    let ollama_port = app_config.ai_ollama_port.unwrap_or(11434);
+    req.model = resolve_model(&req.provider, &req.model, &app_config, ollama_port).await?;
+
+    let system_prompt = format!(
+        "You are an expert database performance engineer and SQL optimization architect.\n\
+        Analyze the user's SQL query to improve performance, indexing, efficiency, and best practices.\n\
+        Format your response in {language}:\n\
+        1. ⚡ **Performance & Optimization Opportunities**:\n\
+           - Identify unnecessary scans, SELECT *, missing indexes, subquery vs JOIN optimizations, or anti-patterns.\n\
+        2. 🚀 **Optimization Strategy**:\n\
+           - Explain how the query and database execution can be optimized.\n\
+        3. ✨ **Optimized SQL**:\n\
+           - Provide the optimized, clean SQL query inside a markdown block ```sql ... ``` so the user can directly apply it.",
+        language = if req.language.is_empty() { "Thai" } else { &req.language }
+    );
+
+    let gen_req = AiGenerateRequest {
+        provider: req.provider.clone(),
+        model: req.model.clone(),
+        prompt: format!("SQL Query to optimize:\n{}\n", req.query),
+        schema: String::new(),
+    };
+
+    let result = dispatch_provider(&app, &app_config, &gen_req, &system_prompt, ollama_port).await;
+
+    match &result {
+        Ok(_) => log::info!(
+            "Query improvement generated successfully using {}",
+            req.model
+        ),
+        Err(e) => log::error!("Query improvement generation failed: {}", e),
     }
 
     result
@@ -1017,6 +1081,325 @@ async fn generate_minimax(
                     .ok_or("Invalid response format from MiniMax")?;
                 MINIMAX_PREFERRED_ENDPOINT.store(index, Ordering::Relaxed);
                 return Ok(clean_response(content));
+            }
+            Ok(res) => {
+                let status = res.status();
+                let error_text = res.text().await.unwrap_or_default();
+                errors.push(format!("{} ({status}): {error_text}", endpoint.region));
+            }
+            Err(error) => errors.push(format!("{}: {error}", endpoint.region)),
+        }
+    }
+
+    Err(format!("MiniMax Error: {}", errors.join("; ")))
+}
+
+// --- Multi-turn AI Chat Support ---
+
+pub async fn handle_chat_ai(app: AppHandle, mut req: AiChatRequest) -> Result<String, String> {
+    log::info!("AI Chat using provider: {}", req.provider);
+
+    let app_config = config::load_config_internal(&app);
+    let ollama_port = app_config.ai_ollama_port.unwrap_or(11434);
+    req.model = resolve_model(&req.provider, &req.model, &app_config, ollama_port).await?;
+
+    let schema_text = req.schema.unwrap_or_default();
+    let system_prompt = if !schema_text.trim().is_empty() {
+        format!(
+            "You are an expert AI database assistant inside Tabularis (similar to DBeaver AI Chat).\n\
+            You help users query, optimize, analyze, and understand their database schemas and data.\n\
+            When writing SQL statements or queries, always enclose them in markdown code blocks: ```sql ... ```.\n\
+            Be concise, clear, and helpful.\n\n\
+            Database Schema Context:\n{}",
+            schema_text
+        )
+    } else {
+        "You are an expert AI database assistant inside Tabularis (similar to DBeaver AI Chat).\n\
+        You help users query, optimize, analyze, and understand their database schemas and data.\n\
+        When writing SQL statements or queries, always enclose them in markdown code blocks: ```sql ... ```.\n\
+        Be concise, clear, and helpful.".to_string()
+    };
+
+    let api_key = if req.provider != "ollama" {
+        config::get_ai_api_key(&app, &req.provider)?
+    } else {
+        String::new()
+    };
+
+    let client = Client::new();
+    let result = match req.provider.as_str() {
+        "openai" => chat_openai(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
+        "anthropic" => chat_anthropic(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
+        "openrouter" => chat_openrouter(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
+        "ollama" => chat_ollama(&client, &req.model, &system_prompt, &req.messages, ollama_port).await,
+        "custom-openai" => {
+            let base_url = app_config
+                .ai_custom_openai_url
+                .as_ref()
+                .filter(|u| !u.is_empty())
+                .ok_or("Custom OpenAI URL not configured.")?;
+            chat_custom_openai(&client, &api_key, &req.model, &system_prompt, &req.messages, base_url).await
+        }
+        "minimax" => chat_minimax(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
+        _ => Err(format!("Unsupported provider: {}", req.provider)),
+    };
+
+    match &result {
+        Ok(_) => log::info!("AI chat response received successfully using {}", req.model),
+        Err(e) => log::error!("AI chat request failed: {}", e),
+    }
+
+    result
+}
+
+async fn chat_openai(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "temperature": 0.2
+    });
+
+    let res = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("OpenAI Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from OpenAI")?;
+
+    Ok(content.to_string())
+}
+
+async fn chat_custom_openai(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+    base_url: &str,
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "temperature": 0.2
+    });
+
+    let url = build_api_url(base_url, "/chat/completions");
+    let res = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("Custom OpenAI Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from custom OpenAI-compatible provider")?;
+
+    Ok(content.to_string())
+}
+
+async fn chat_openrouter(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "temperature": 0.2
+    });
+
+    let res = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("HTTP-Referer", "https://github.com/TabularisDB/tabularis")
+        .header("X-Title", "Tabularis")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("OpenRouter Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from OpenRouter")?;
+
+    Ok(content.to_string())
+}
+
+async fn chat_anthropic(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+) -> Result<String, String> {
+    let anthropic_messages: Vec<serde_json::Value> = messages
+        .iter()
+        .filter(|m| m.role == "user" || m.role == "assistant")
+        .map(|m| json!({"role": m.role, "content": m.content}))
+        .collect();
+
+    let body = json!({
+        "model": model,
+        "system": system_prompt,
+        "messages": anthropic_messages,
+        "max_tokens": 2048,
+        "temperature": 0.2
+    });
+
+    let res = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("Anthropic Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["content"][0]["text"]
+        .as_str()
+        .ok_or("Invalid response format from Anthropic")?;
+
+    Ok(content.to_string())
+}
+
+async fn chat_ollama(
+    client: &Client,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+    port: u16,
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "stream": false,
+        "options": {
+            "temperature": 0.2
+        }
+    });
+
+    let url = format!("http://localhost:{}/api/chat", port);
+    let res = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama on port {}: {}", port, e))?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("Ollama Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from Ollama")?;
+
+    Ok(content.to_string())
+}
+
+async fn chat_minimax(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "temperature": 0.2
+    });
+
+    let preferred = MINIMAX_PREFERRED_ENDPOINT.load(Ordering::Relaxed);
+    let mut errors = Vec::new();
+
+    for index in minimax_endpoint_order(preferred) {
+        let endpoint = MINIMAX_ENDPOINTS[index];
+        let url = format!("{}/chat/completions", endpoint.openai_base_url);
+        match client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(res) if res.status().is_success() => {
+                let json: serde_json::Value =
+                    res.json().await.map_err(|e| e.to_string())?;
+                let content = json["choices"][0]["message"]["content"]
+                    .as_str()
+                    .ok_or("Invalid response format from MiniMax")?;
+                MINIMAX_PREFERRED_ENDPOINT.store(index, Ordering::Relaxed);
+                return Ok(content.to_string());
             }
             Ok(res) => {
                 let status = res.status();

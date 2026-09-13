@@ -15,6 +15,107 @@
         color: #f8fafc;
       }
     </style>
+    <script>
+      // Fallback for Tauri internals when running in standalone browser mode
+      if (typeof window !== 'undefined' && !window.__TAURI_INTERNALS__) {
+        var _cbId = 1;
+        var _cbs = new Map();
+        var _evs = new Map();
+
+        window.__TAURI_INTERNALS__ = {
+          transformCallback: function(cb, once) {
+            var id = _cbId++;
+            _cbs.set(id, function(res) {
+              if (once) _cbs.delete(id);
+              if (typeof cb === 'function') cb(res);
+            });
+            return id;
+          },
+          unregisterCallback: function(id) {
+            _cbs.delete(id);
+          },
+          invoke: function(cmd, args) {
+            args = args || {};
+            if (typeof window !== 'undefined' && window.__TABULARIS_SHIM_INVOKE__) {
+              return window.__TABULARIS_SHIM_INVOKE__(cmd, args);
+            }
+            if (cmd === 'plugin:event|listen') {
+              var id = args.handler || _cbId++;
+              var ev = args.event;
+              if (ev) {
+                if (!_evs.has(ev)) _evs.set(ev, new Set());
+                _evs.get(ev).add(id);
+              }
+              return Promise.resolve(id);
+            }
+            if (cmd === 'plugin:event|unlisten') {
+              var ev = args.event;
+              var id = args.eventId;
+              if (ev && id && _evs.has(ev)) _evs.get(ev).delete(id);
+              _cbs.delete(id);
+              return Promise.resolve(null);
+            }
+            if (cmd === 'plugin:event|emit') {
+              var ev = args.event;
+              var payload = args.payload;
+              if (ev && _evs.has(ev)) {
+                _evs.get(ev).forEach(function(cid) {
+                  var fn = _cbs.get(cid);
+                  if (fn) fn({ event: ev, id: cid, payload: payload });
+                });
+              }
+              return Promise.resolve(null);
+            }
+            if (cmd === 'plugin:window|get_all_windows') {
+              return Promise.resolve(['main']);
+            }
+            if (cmd === 'plugin:window|current') {
+              return Promise.resolve({ label: 'main' });
+            }
+            if (cmd === 'get_connections_with_groups') {
+              return Promise.resolve({ connections: [], groups: [] });
+            }
+            if (cmd === 'get_connections') {
+              return Promise.resolve([]);
+            }
+            if (cmd === 'get_registered_drivers' || cmd === 'get_installed_plugins' || cmd === 'get_all_themes') {
+              return Promise.resolve([]);
+            }
+            if (cmd === 'get_config') {
+              return Promise.resolve({
+                resultPageSize: 500,
+                language: "auto",
+                fontFamily: "Inter",
+                fontSize: 13,
+                aiEnabled: false,
+                aiProvider: null,
+                aiModel: null,
+                autoCheckUpdatesOnStartup: false,
+                releaseChannel: "stable",
+                theme: "tabularis-dark",
+                showWelcome: false,
+                runStatementUnderCursor: true,
+                erDiagramDefaultLayout: "LR"
+              });
+            }
+            return Promise.resolve(null);
+          },
+          convertFileSrc: function(path) { return path; },
+          metadata: {
+            currentWindow: { label: 'main' },
+            currentWebview: { label: 'main' }
+          },
+          plugins: {}
+        };
+
+        window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+          unregisterListener: function(ev, id) {
+            if (_evs.has(ev)) _evs.get(ev).delete(id);
+            _cbs.delete(id);
+          }
+        };
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

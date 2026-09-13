@@ -386,8 +386,8 @@ pnpm tauri build
 - [ ] [SQL Formatting / Prettier](https://github.com/TabularisDB/tabularis/issues/23)
 - [ ] [Data Compare / Diff Tool](https://github.com/TabularisDB/tabularis/issues/21)
 - [ ] [Team Collaboration](https://github.com/TabularisDB/tabularis/issues/20)
-- [ ] [Better SQLite Support](https://github.com/TabularisDB/tabularis/issues/17)
-- [ ] [Better PostgreSQL Support](https://github.com/TabularisDB/tabularis/issues/16)
+- [x] [Better SQLite Support](https://github.com/TabularisDB/tabularis/issues/17)
+- [x] [Better PostgreSQL Support](https://github.com/TabularisDB/tabularis/issues/16)
 
 ## Contribuindo
 

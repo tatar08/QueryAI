@@ -23,6 +23,7 @@ import { useClickOutside } from "../hooks/useClickOutside";
 import { DANGEROUS_QUERY_I18N } from "../hooks/useDangerousQueryGuard";
 import { useProductionGuard } from "../hooks/useProductionGuard";
 import { useQueryGuards } from "../hooks/useQueryGuards";
+import { isReadOnlyQuery } from "../utils/sqlAnalysis";
 import {
   generateTempId,
   initializeNewRow,
@@ -31,6 +32,8 @@ import {
 } from "../utils/pendingInsertions";
 import { AiQueryModal } from "../components/modals/AiQueryModal";
 import { AiExplainModal } from "../components/modals/AiExplainModal";
+import { AiImproveModal } from "../components/modals/AiImproveModal";
+import { AiChatPanel } from "../components/ai/AiChatPanel";
 import { AiDropdownButton } from "../components/ui/AiDropdownButton";
 import { VisualExplainModal } from "../components/modals/VisualExplainModal";
 import {
@@ -40,9 +43,11 @@ import {
   Download,
   Square,
   ChevronDown,
+  Lock,
   ChevronUp,
   Save,
   X,
+  Sparkles,
   Database,
   Table as TableIcon,
   FileCode,
@@ -69,6 +74,8 @@ import {
   ExternalLink,
   CheckCircle2,
   WrapText,
+  ArrowRightLeft,
+  Settings2,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -93,6 +100,9 @@ import {
   ExportProgressModal,
   type ExportStatus,
 } from "../components/modals/ExportProgressModal";
+import { DataTransferModal } from "../components/modals/DataTransferModal";
+import { DataCompareModal } from "../components/modals/DataCompareModal";
+import { useWorkspace } from "../contexts/WorkspaceContext";
 import { splitQueries, splitStatements, findStatementAtOffset, extractTableName, getExplainableQueries, statementLabel, type Statement } from "../utils/sql";
 import { resolveRunTarget, type RunContext } from "../utils/runTarget";
 import {
@@ -218,6 +228,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
   const { settings } = useSettings();
   const { saveQuery } = useSavedQueries();
   const { addEntry: addHistoryEntry } = useQueryHistory();
+  const { canPerformAction, effectiveRole } = useWorkspace();
   const {
     tabs,
     activeTab,
@@ -277,6 +288,9 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
     rowsProcessed: 0,
     fileName: "",
   });
+
+  const [dataTransferModalOpen, setDataTransferModalOpen] = useState(false);
+  const [dataCompareModalOpen, setDataCompareModalOpen] = useState(false);
 
   const [activeFkQuery, setActiveFkQuery] = useState<{
     fk: ForeignKey;
@@ -448,6 +462,51 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
   );
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isAiExplainModalOpen, setIsAiExplainModalOpen] = useState(false);
+  const [isAiImproveModalOpen, setIsAiImproveModalOpen] = useState(false);
+  const [isAiChatOpen, setIsAiChatOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tabularis_ai_chat_open") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [aiChatWidth, setAiChatWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("tabularis_ai_chat_width");
+      return saved ? Math.max(280, Math.min(700, Number(saved))) : 380;
+    } catch {
+      return 380;
+    }
+  });
+
+  const handleAiChatResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = aiChatWidth;
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const delta = startX - moveEvent.clientX;
+        const newWidth = Math.max(280, Math.min(700, startWidth + delta));
+        setAiChatWidth(newWidth);
+        try {
+          localStorage.setItem("tabularis_ai_chat_width", String(newWidth));
+        } catch {
+          // ignore
+        }
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [aiChatWidth],
+  );
+
   const [isVisualExplainOpen, setIsVisualExplainOpen] = useState(false);
   const [visualExplainQuery, setVisualExplainQuery] = useState<string | null>(null);
   const [isExplainSelectionOpen, setIsExplainSelectionOpen] = useState(false);
@@ -949,6 +1008,18 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
 
       if (!textToRun || !textToRun.trim()) return;
 
+      const activeConn = connections.find((c) => c.id === activeConnectionId);
+      if (activeConn?.read_only && !isReadOnlyQuery(textToRun)) {
+        updateTab(targetTabId, {
+          isLoading: false,
+          error: t("editor.readOnlyBlocked", {
+            defaultValue: `Operation blocked: Connection "${activeConn.name}" is configured as READ ONLY. Mutating queries (INSERT, UPDATE, DELETE, DROP, ALTER, etc.) are strictly prohibited.`,
+          }),
+          result: null,
+        });
+        return;
+      }
+
       const mayRun = await guardQueryExecution(textToRun);
       if (!mayRun) return;
 
@@ -1021,6 +1092,13 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         || undefined;
 
       try {
+        // RBAC Query Guard: Prevent write queries if role lacks write_queries permission
+        if (!canPerformAction("write_queries") && !isReadOnlyQuery(textToRun)) {
+          throw new Error(
+            `คำสั่งถูกระงับ: บทบาท ${effectiveRole.toUpperCase()} (Read-Only) ไม่มีสิทธิ์รันคำสั่งแก้ไข/ลบฐานข้อมูล (Write Query)`,
+          );
+        }
+
         const start = performance.now();
         // Per-tab page size (falling back to the global Result Page Size)
         // drives pagination; the "Total Limit" input is handled in the SQL.
@@ -1194,6 +1272,21 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
       const targetTab = tabsRef.current.find((t) => t.id === targetTabId);
       if (!targetTab) return;
 
+      const activeConn = connections.find((c) => c.id === activeConnectionId);
+      if (activeConn?.read_only) {
+        const mutatingQuery = queries.find((q) => !isReadOnlyQuery(q));
+        if (mutatingQuery) {
+          updateTab(targetTabId, {
+            isLoading: false,
+            error: t("editor.readOnlyBlocked", {
+              defaultValue: `Operation blocked: Connection "${activeConn.name}" is configured as READ ONLY. Data-modifying queries in batch execution are strictly prohibited.`,
+            }),
+            result: null,
+          });
+          return;
+        }
+      }
+
       const mayRun = await guardQueryExecution(queries);
       if (!mayRun) return;
 
@@ -1319,6 +1412,15 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
       const batchStart = performance.now();
       let batchResults: BatchStatementResult[];
       try {
+        if (!canPerformAction("write_queries")) {
+          for (const e of entries) {
+            if (!isReadOnlyQuery(e.query)) {
+              throw new Error(
+                `คำสั่งถูกระงับ: บทบาท ${effectiveRole.toUpperCase()} (Read-Only) ไม่มีสิทธิ์รันคำสั่งแก้ไข/ลบฐานข้อมูล (Write Query)`,
+              );
+            }
+          }
+        }
         batchResults = await invoke<BatchStatementResult[]>(
           "execute_query_batch",
           {
@@ -2772,6 +2874,19 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
     )
       return;
 
+    const activeConn = connections.find((c) => c.id === activeConnectionId);
+    if (activeConn?.read_only) {
+      const msg = t("editor.readOnlyBlocked", {
+        defaultValue: `Operation blocked: Connection "${activeConn.name}" is in READ ONLY mode. Data modifications are strictly prohibited.`,
+      });
+      showAlert(msg, {
+        title: t("common.readOnly", { defaultValue: "Read Only Connection" }),
+        kind: "error",
+      });
+      updateActiveTab({ error: msg });
+      return;
+    }
+
     // Production safety: grid edits are writes, confirm before committing.
     if (!(await guardProductionWrite(activeConnectionId))) return;
 
@@ -2991,14 +3106,18 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
     guardProductionWrite,
   ]);
 
-  // Cmd/Ctrl+S: commit the active tab's pending grid changes (like TablePlus).
+  // Cmd/Ctrl+S: commit pending grid changes, or open Save Query modal for the active query.
   useEffect(() => {
     const focused = isFocusedPane(explorerConnectionId, activeConnectionId);
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!focused) return;
-      if (matchesShortcut(e, "save_grid_changes")) {
+      if (matchesShortcut(e, "save_grid_changes") || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s")) {
         e.preventDefault();
-        if (hasPendingChanges) handleSubmitChanges();
+        if (hasPendingChanges) {
+          handleSubmitChanges();
+        } else if (!isTableTab && activeTab?.query?.trim()) {
+          setSaveQueryModal({ isOpen: true, sql: activeTab.query });
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -3009,6 +3128,8 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
     matchesShortcut,
     hasPendingChanges,
     handleSubmitChanges,
+    isTableTab,
+    activeTab,
   ]);
 
   const handleParamsSubmit = useCallback(
@@ -3206,6 +3327,17 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         } else {
           setExplainSelectableQueries(explainable);
           setIsExplainSelectionOpen(true);
+        }
+      },
+    });
+    editor.addAction({
+      id: "save-query",
+      label: t("editor.saveQuery"),
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: (ed) => {
+        const text = ed.getValue().trim();
+        if (text) {
+          setSaveQueryModal({ isOpen: true, sql: text });
         }
       },
     });
@@ -3800,12 +3932,21 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         </button>
       </div>
 
-      {/* Toolbar — hidden for notebook and users tabs. A size container so buttons can
+      {/* Main Work Area (Editor/Results on Left, Collapsible AI Chat Drawer on Right) */}
+      <div className="flex-1 flex min-h-0 relative overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          {/* Toolbar — hidden for notebook and users tabs. A size container so buttons can
           collapse to icon-only in narrow split panes; the explicit z-index
           keeps its dropdowns above the editor and the table toolbar (z-30):
           the container creates a stacking context that would otherwise paint
           below later siblings. */}
       {!isNotebookTab && !isUsersTab && <div className="@container relative z-40 flex items-center py-2 pl-2 pr-3 border-b border-default bg-elevated gap-1.5 @[560px]:gap-2 h-[50px]">
+        {activeConnection?.read_only && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold tracking-wide shrink-0 select-none">
+            <Lock size={12} />
+            <span>READ ONLY</span>
+          </div>
+        )}
         {!activeTab.readOnly && activeTab.isLoading ? (
           <button
             onClick={stopQuery}
@@ -3934,6 +4075,25 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
           </button>
         )}
 
+        {/* Save Query Button */}
+        {!isTableTab && (
+          <button
+            onClick={() => {
+              if (activeTab?.query?.trim()) {
+                setSaveQueryModal({ isOpen: true, sql: activeTab.query });
+              }
+            }}
+            disabled={!activeTab?.query?.trim()}
+            className="flex items-center gap-2 px-2 @[640px]:px-3 py-1.5 bg-surface-secondary hover:bg-surface text-primary rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed border border-strong shrink-0 transition-colors"
+            title={`${t("editor.saveQuery")} (${isMac ? "⌘+S" : "Ctrl+S"})`}
+          >
+            <Save size={16} className="text-amber-400" />
+            <span className="hidden @[640px]:inline whitespace-nowrap">
+              {t("editor.saveQuery")}
+            </span>
+          </button>
+        )}
+
         <div ref={exportMenuRef} className="relative ml-auto shrink-0">
           <button
             onClick={() => setExportMenuOpen(!exportMenuOpen)}
@@ -3992,6 +4152,55 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
                 <span className="flex-1">Markdown</span>
                 <span className="text-xs text-muted">.md</span>
               </button>
+              <div className="h-px bg-default my-1" />
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  setDataTransferModalOpen(true);
+                }}
+                className="flex items-center gap-2.5 text-left px-3 py-2 text-sm text-secondary hover:bg-blue-500/15 hover:text-blue-400 transition-colors"
+              >
+                <Database size={14} className="shrink-0 text-blue-400" />
+                <span className="flex-1 font-medium">{t("dataTransfer.menuItem", "Transfer Data...")}</span>
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  setDataCompareModalOpen(true);
+                }}
+                className="flex items-center gap-2.5 text-left px-3 py-2 text-sm text-secondary hover:bg-emerald-500/15 hover:text-emerald-400 transition-colors"
+              >
+                <ArrowRightLeft size={14} className="shrink-0 text-emerald-400" />
+                <span className="flex-1 font-medium">{t("dataCompare.menuItem", "Compare Data...")}</span>
+              </button>
+              {activeDialect === "postgres" && (
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent("app:open-postgres-tools"));
+                  }}
+                  className="flex items-center gap-2.5 text-left px-3 py-2 text-sm text-secondary hover:bg-indigo-500/15 hover:text-indigo-400 transition-colors"
+                >
+                  <Settings2 size={14} className="shrink-0 text-indigo-400" />
+                  <span className="flex-1 font-medium">{t("postgresTools.menuItem", "PostgreSQL Tools...")}</span>
+                </button>
+              )}
+              {activeDialect === "sqlite" && (
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent("open-sqlite-tools"));
+                  }}
+                  className="flex items-center gap-2.5 text-left px-3 py-2 text-sm text-secondary hover:bg-emerald-500/15 hover:text-emerald-400 transition-colors"
+                >
+                  <Settings2 size={14} className="shrink-0 text-emerald-400" />
+                  <span className="flex-1 font-medium">{t("sqliteTools.menuItem", "SQLite Tools...")}</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -4133,6 +4342,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
                   <AiDropdownButton
                     onGenerate={() => setIsAiModalOpen(true)}
                     onExplain={() => setIsAiExplainModalOpen(true)}
+                    onImprove={() => setIsAiImproveModalOpen(true)}
                     disableAll={!activeConnectionId}
                     disableExplain={!tab.query?.trim()}
                   />
@@ -4327,7 +4537,15 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
                 <p className="text-sm">{t("editor.executingQuery")}</p>
               </div>
             ) : activeTab.error ? (
-              <ErrorDisplay error={activeTab.error} t={t} />
+              <ErrorDisplay
+                error={activeTab.error}
+                t={t}
+                onFixWithAi={
+                  settings.aiEnabled && activeConnectionId
+                    ? () => setIsAiExplainModalOpen(true)
+                    : undefined
+                }
+              />
             ) : shouldShowStatementSuccess(activeTab) ? (
               // Non-SELECT statement (INSERT/UPDATE/DELETE/DDL): no result set,
               // so surface an explicit success message instead of an empty grid.
@@ -4735,7 +4953,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
                           ? handleSort
                           : undefined
                       }
-                      readonly={driverReadonly || !!activeTab.materialized}
+                      readonly={Boolean(activeConnection?.read_only) || driverReadonly || !!activeTab.materialized}
                       totalRows={activeTab.result?.pagination?.total_rows}
                       hasMore={activeTab.result?.pagination?.has_more}
                       onCopyAllRows={handleCopyAllRows}
@@ -4775,6 +4993,70 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
           </button>
         </div>
       )}
+        </div>
+
+        {/* AI Chat Drawer & Collapsed Vertical Toggle Bar */}
+        {isAiChatOpen ? (
+          <aside
+            className="relative shrink-0 flex flex-col h-full z-20 shadow-2xl overflow-hidden animate-slide-in-right border-l border-default"
+            style={{ width: `${aiChatWidth}px` }}
+          >
+            {/* Draggable resize handle on left border */}
+            <div
+              onMouseDown={handleAiChatResizeStart}
+              className="absolute top-0 bottom-0 -left-1 w-2 cursor-col-resize z-30 group select-none"
+              title="Resize AI Chat"
+            >
+              <div className="w-0.5 h-full bg-default group-hover:bg-blue-500 mx-auto transition-colors" />
+            </div>
+
+            <AiChatPanel
+              onClose={() => {
+                setIsAiChatOpen(false);
+                try {
+                  localStorage.setItem("tabularis_ai_chat_open", "false");
+                } catch {
+                  // ignore
+                }
+              }}
+              onInsertSql={(sql) => {
+                updateActiveTab({ query: sql });
+              }}
+              onRunSql={(sql) => {
+                updateActiveTab({ query: sql });
+                void runQuery(sql, 1);
+              }}
+              activeQuery={activeTab?.query}
+              connectionId={activeConnectionId}
+              schema={activeTab?.schema ?? activeSchema}
+              activeDatabaseName={activeDatabaseName}
+            />
+          </aside>
+        ) : (
+          /* Collapsed Vertical Toggle Tab along right border */
+          <button
+            type="button"
+            onClick={() => {
+              setIsAiChatOpen(true);
+              try {
+                localStorage.setItem("tabularis_ai_chat_open", "true");
+              } catch {
+                // ignore
+              }
+            }}
+            className="w-8 border-l border-default bg-elevated hover:bg-surface-secondary flex flex-col items-center justify-between py-4 text-muted hover:text-primary transition-all group shrink-0 cursor-pointer shadow-sm select-none z-20"
+            title="Chat with AI (Click to expand)"
+          >
+            <div className="p-1 rounded-full bg-blue-500/10 text-blue-400 group-hover:scale-110 group-hover:bg-blue-500/20 transition-all">
+              <Sparkles size={14} className="text-yellow-400 animate-pulse" />
+            </div>
+            <div className="[writing-mode:vertical-rl] rotate-180 text-xs font-medium tracking-wide text-secondary group-hover:text-primary flex items-center gap-1.5 py-2">
+              <span>Chat with AI</span>
+            </div>
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/60 group-hover:bg-blue-400" />
+          </button>
+        )}
+      </div>
 
       {activeTab.activeTable && (
         <NewRowModal
@@ -4860,7 +5142,20 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
       <AiExplainModal
         isOpen={isAiExplainModalOpen}
         onClose={() => setIsAiExplainModalOpen(false)}
-        query={activeTab.query}
+        query={activeTab?.query || ""}
+        onApplyFix={(fixedSql) => {
+          updateActiveTab({ query: fixedSql });
+          void runQuery(fixedSql, 1);
+        }}
+      />
+      <AiImproveModal
+        isOpen={isAiImproveModalOpen}
+        onClose={() => setIsAiImproveModalOpen(false)}
+        query={activeTab?.query || ""}
+        onApplyImprovement={(improvedSql) => {
+          updateActiveTab({ query: improvedSql });
+          void runQuery(improvedSql, 1);
+        }}
       />
       <VisualExplainModal
         isOpen={isVisualExplainOpen}
@@ -4951,6 +5246,28 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         warningMessage={exportState.warningMessage}
         onCancel={cancelExport}
         onClose={closeExportModal}
+      />
+      <DataTransferModal
+        isOpen={dataTransferModalOpen}
+        onClose={() => setDataTransferModalOpen(false)}
+        sourceConnectionId={activeConnectionId}
+        sourceDatabaseName={activeDatabaseName}
+        sourceSchema={activeSchema}
+        sourceTableName={activeTab?.type === "table" ? activeTab.activeTable : null}
+        sourceQuery={activeTab?.query || null}
+        sourceResult={activeResultEntry?.result ? {
+          columns: activeResultEntry.result.columns,
+          rows: activeResultEntry.result.rows,
+        } : null}
+      />
+      <DataCompareModal
+        isOpen={dataCompareModalOpen}
+        onClose={() => setDataCompareModalOpen(false)}
+        sourceConnectionId={activeConnectionId}
+        sourceDatabaseName={activeDatabaseName}
+        sourceSchema={activeSchema}
+        sourceTableName={activeTab?.type === "table" ? activeTab.activeTable : null}
+        sourceQuery={activeTab?.query || null}
       />
       <QueryParamsModal
         isOpen={queryParamsModal.isOpen}

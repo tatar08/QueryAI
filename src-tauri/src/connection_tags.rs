@@ -245,6 +245,7 @@ mod tests {
             appearance: None,
             tag_ids: tag_ids.map(|v| v.iter().map(|s| s.to_string()).collect()),
             environment: None,
+            read_only: None,
         }
     }
 

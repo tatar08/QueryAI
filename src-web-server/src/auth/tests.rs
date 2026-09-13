@@ -38,6 +38,13 @@ impl SessionRepository for MemorySessionRepository {
             Ok(())
         })
     }
+
+    fn revoke_all_for_user<'a>(&'a self, _user_id: &'a str) -> SessionFuture<'a, ()> {
+        Box::pin(async move {
+            *self.principal.lock().unwrap() = None;
+            Ok(())
+        })
+    }
 }
 
 #[tokio::test]
