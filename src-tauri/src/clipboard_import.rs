@@ -139,9 +139,15 @@ async fn add_new_columns(
             col.data_type,
             null_clause,
         );
-        drv.execute_query(params, &sql, None, 1, schema_ref)
-            .await
-            .map_err(|e| format!("Failed to add column '{}': {e}", col.name))?;
+        // Idempotent: a retried/partially-completed import (e.g. after an
+        // earlier failure mid-batch) may have already added this column.
+        // Failing the whole import over that is the wrong default here --
+        // treat "already exists" as success and move on.
+        if let Err(e) = drv.execute_query(params, &sql, None, 1, schema_ref).await {
+            if !e.to_lowercase().contains("already exists") {
+                return Err(format!("Failed to add column '{}': {e}", col.name));
+            }
+        }
     }
     Ok(())
 }

@@ -62,6 +62,14 @@ pub struct AiSuggestTableNameRequest {
     pub sample_rows: Vec<Vec<String>>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TestAiConnectionRequest {
+    pub provider: String,
+    pub api_key: Option<String>,
+    pub custom_url: Option<String>,
+    pub ollama_port: Option<u16>,
+}
+
 #[derive(Deserialize, Debug)]
 struct OllamaTagsResponse {
     models: Vec<OllamaModel>,
@@ -250,6 +258,36 @@ async fn fetch_anthropic_models(api_key: &str) -> Vec<String> {
     }
 }
 
+async fn fetch_gemini_models(api_key: &str) -> Vec<String> {
+    if api_key.is_empty() {
+        return Vec::new();
+    }
+    let client = Client::new();
+    match client
+        .get("https://generativelanguage.googleapis.com/v1beta/openai/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+    {
+        Ok(res) => {
+            if res.status().is_success() {
+                if let Ok(json) = res.json::<OpenAiModelList>().await {
+                    let mut models: Vec<String> = json
+                        .data
+                        .into_iter()
+                        .map(|m| m.id)
+                        .filter(|id| id.starts_with("gemini"))
+                        .collect();
+                    models.sort();
+                    return models;
+                }
+            }
+            Vec::new()
+        }
+        Err(_) => Vec::new(),
+    }
+}
+
 async fn fetch_minimax_models(api_key: &str) -> Vec<String> {
     if api_key.is_empty() {
         return Vec::new();
@@ -414,6 +452,14 @@ pub async fn get_ai_models(
                     }
                 }
 
+                // Always refresh Gemini if API key is present
+                if let Ok(key) = config::get_ai_api_key(&app, "gemini") {
+                    let gemini_models = fetch_gemini_models(&key).await;
+                    if !gemini_models.is_empty() {
+                        cached_models.insert("gemini".to_string(), gemini_models);
+                    }
+                }
+
                 return Ok(cached_models);
             }
         }
@@ -458,6 +504,19 @@ pub async fn get_ai_models(
         let remote_models = fetch_minimax_models(&key).await;
         if !remote_models.is_empty() {
             if let Some(static_list) = models.get_mut("minimax") {
+                let mut set: HashSet<String> = static_list.iter().cloned().collect();
+                set.extend(remote_models);
+                *static_list = set.into_iter().collect();
+                static_list.sort();
+            }
+        }
+    }
+
+    // 5. Gemini (Dynamic if key exists)
+    if let Ok(key) = config::get_ai_api_key(&app, "gemini") {
+        let remote_models = fetch_gemini_models(&key).await;
+        if !remote_models.is_empty() {
+            if let Some(static_list) = models.get_mut("gemini") {
                 let mut set: HashSet<String> = static_list.iter().cloned().collect();
                 set.extend(remote_models);
                 *static_list = set.into_iter().collect();
@@ -540,6 +599,170 @@ pub async fn chat_ai(app: AppHandle, req: AiChatRequest) -> Result<String, Strin
     handle_chat_ai(app, req).await
 }
 
+#[tauri::command]
+pub async fn test_ai_connection(
+    app: AppHandle,
+    req: TestAiConnectionRequest,
+) -> Result<String, String> {
+    let client = Client::new();
+    let app_config = config::load_config_internal(&app);
+
+    let get_key = |prov: &str| -> Result<String, String> {
+        let mut key = if let Some(ref k) = req.api_key {
+            let trimmed = k.trim();
+            if !trimmed.is_empty() {
+                trimmed.to_string()
+            } else {
+                config::get_ai_api_key(&app, prov)?
+            }
+        } else {
+            config::get_ai_api_key(&app, prov)?
+        };
+        if prov == "gemini" && key.starts_with("AlzaSy") {
+            key = format!("AIzaSy{}", &key[6..]);
+        }
+        Ok(key)
+    };
+
+    match req.provider.as_str() {
+        "gemini" => {
+            let key = get_key("gemini")?;
+            let res = client
+                .get("https://generativelanguage.googleapis.com/v1beta/openai/models")
+                .header("Authorization", format!("Bearer {}", key))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to connect to Google Gemini: {e}"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("Gemini connection failed ({status}): {err}"));
+            }
+            Ok("Successfully connected to Google Gemini.".to_string())
+        }
+        "openai" => {
+            let key = get_key("openai")?;
+            let res = client
+                .get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {}", key))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to connect to OpenAI: {e}"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("OpenAI connection failed ({status}): {err}"));
+            }
+            Ok("Successfully connected to OpenAI.".to_string())
+        }
+        "anthropic" => {
+            let key = get_key("anthropic")?;
+            let res = client
+                .get("https://api.anthropic.com/v1/models")
+                .header("x-api-key", &key)
+                .header("anthropic-version", "2023-06-01")
+                .send()
+                .await
+                .map_err(|e| format!("Failed to connect to Anthropic: {e}"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("Anthropic connection failed ({status}): {err}"));
+            }
+            Ok("Successfully connected to Anthropic.".to_string())
+        }
+        "openrouter" => {
+            let key = get_key("openrouter")?;
+            let res = client
+                .get("https://openrouter.ai/api/v1/auth/key")
+                .header("Authorization", format!("Bearer {}", key))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to connect to OpenRouter: {e}"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("OpenRouter connection failed ({status}): {err}"));
+            }
+            Ok("Successfully connected to OpenRouter.".to_string())
+        }
+        "minimax" => {
+            let key = get_key("minimax")?;
+            let preferred = MINIMAX_PREFERRED_ENDPOINT.load(Ordering::Relaxed);
+            let mut errors = Vec::new();
+            for index in minimax_endpoint_order(preferred) {
+                let endpoint = MINIMAX_ENDPOINTS[index];
+                match client
+                    .get(format!("{}/models", endpoint.openai_base_url))
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+                {
+                    Ok(res) if res.status().is_success() => {
+                        MINIMAX_PREFERRED_ENDPOINT.store(index, Ordering::Relaxed);
+                        return Ok("Successfully connected to MiniMax.".to_string());
+                    }
+                    Ok(res) => {
+                        let status = res.status();
+                        let err = res.text().await.unwrap_or_default();
+                        errors.push(format!("{} ({status}): {err}", endpoint.region));
+                    }
+                    Err(e) => errors.push(format!("{}: {e}", endpoint.region)),
+                }
+            }
+            Err(format!("MiniMax connection failed: {}", errors.join("; ")))
+        }
+        "ollama" => {
+            let port = req
+                .ollama_port
+                .or(app_config.ai_ollama_port)
+                .unwrap_or(11434);
+            let url = format!("http://localhost:{}/api/tags", port);
+            let res = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| format!("Could not connect to Ollama on port {port}. Is the service running? ({e})"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("Ollama returned status ({status}): {err}"));
+            }
+            Ok("Successfully connected to Ollama.".to_string())
+        }
+        "custom-openai" => {
+            let key = get_key("custom-openai")?;
+            let base_url = req
+                .custom_url
+                .as_deref()
+                .or(app_config.ai_custom_openai_url.as_deref())
+                .filter(|u| !u.trim().is_empty())
+                .ok_or_else(|| "Custom OpenAI Endpoint URL is not configured.".to_string())?;
+
+            let url = build_api_url(base_url, "/models");
+            let res = client
+                .get(&url)
+                .header("Authorization", format!("Bearer {}", key))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to connect to Custom OpenAI endpoint: {e}"))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err = res.text().await.unwrap_or_default();
+                return Err(format!("Custom OpenAI connection failed ({status}): {err}"));
+            }
+            Ok("Successfully connected to Custom OpenAI endpoint.".to_string())
+        }
+        _ => Err(format!("Unsupported provider: {}", req.provider)),
+    }
+}
+
 // --- Shared helpers ---
 
 async fn resolve_model(
@@ -604,6 +827,7 @@ async fn dispatch_provider(
             generate_custom_openai(&client, &api_key, gen_req, system_prompt, base_url).await
         }
         "minimax" => generate_minimax(&client, &api_key, gen_req, system_prompt).await,
+        "gemini" => generate_gemini(&client, &api_key, gen_req, system_prompt).await,
         _ => Err(format!("Unsupported provider: {}", gen_req.provider)),
     }
 }
@@ -1094,6 +1318,43 @@ async fn generate_minimax(
     Err(format!("MiniMax Error: {}", errors.join("; ")))
 }
 
+async fn generate_gemini(
+    client: &Client,
+    api_key: &str,
+    req: &AiGenerateRequest,
+    system_prompt: &str,
+) -> Result<String, String> {
+    let body = json!({
+        "model": req.model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": req.prompt}
+        ],
+        "temperature": 0.0
+    });
+
+    let res = client
+        .post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("Gemini Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from Gemini")?;
+
+    Ok(clean_response(content))
+}
+
 // --- Multi-turn AI Chat Support ---
 
 pub async fn handle_chat_ai(app: AppHandle, mut req: AiChatRequest) -> Result<String, String> {
@@ -1141,6 +1402,7 @@ pub async fn handle_chat_ai(app: AppHandle, mut req: AiChatRequest) -> Result<St
             chat_custom_openai(&client, &api_key, &req.model, &system_prompt, &req.messages, base_url).await
         }
         "minimax" => chat_minimax(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
+        "gemini" => chat_gemini(&client, &api_key, &req.model, &system_prompt, &req.messages).await,
         _ => Err(format!("Unsupported provider: {}", req.provider)),
     };
 
@@ -1413,6 +1675,46 @@ async fn chat_minimax(
     Err(format!("MiniMax Error: {}", errors.join("; ")))
 }
 
+async fn chat_gemini(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    messages: &[AiChatMessage],
+) -> Result<String, String> {
+    let mut msgs = vec![json!({"role": "system", "content": system_prompt})];
+    for m in messages {
+        msgs.push(json!({"role": m.role, "content": m.content}));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": msgs,
+        "temperature": 0.2
+    });
+
+    let res = client
+        .post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let error_text = res.text().await.unwrap_or_default();
+        return Err(format!("Gemini Error: {}", error_text));
+    }
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid response format from Gemini")?;
+
+    Ok(content.to_string())
+}
+
 fn clean_response(text: &str) -> String {
     let text = text.trim();
     if text.starts_with("```") {
@@ -1441,6 +1743,7 @@ mod tests {
         assert!(models.contains_key("anthropic"));
         assert!(models.contains_key("openrouter"));
         assert!(models.contains_key("minimax"));
+        assert!(models.contains_key("gemini"));
 
         // Check for new futuristic models from yaml
         let openai = models.get("openai").unwrap();
@@ -1460,6 +1763,12 @@ mod tests {
         assert!(minimax.contains(&"MiniMax-M2.7-highspeed".to_string()));
         // M3 should be listed first so it is selected as the default model
         assert_eq!(minimax.first().map(String::as_str), Some("MiniMax-M3"));
+
+        // Check Gemini models
+        let gemini = models.get("gemini").unwrap();
+        assert!(gemini.contains(&"gemini-2.5-flash".to_string()));
+        assert!(gemini.contains(&"gemini-2.5-pro".to_string()));
+        assert_eq!(gemini.first().map(String::as_str), Some("gemini-2.5-flash"));
 
         // Ollama is not in yaml, so it shouldn't be here yet
         assert!(!models.contains_key("ollama"));

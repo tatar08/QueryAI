@@ -55,4 +55,27 @@ describe("isReadOnlyQuery", () => {
     expect(isReadOnlyQuery("/* UPDATE t */ SELECT 1")).toBe(true);
     expect(isReadOnlyQuery("SELECT ';DELETE FROM t;' FROM dual")).toBe(true);
   });
+
+  it("classifies MongoDB shell reads as read-only", () => {
+    expect(
+      isReadOnlyQuery('db.messages.find({"key":"abc"}).sort({_id:-1})'),
+    ).toBe(true);
+    expect(isReadOnlyQuery("db.messages.findOne({_id: 1})")).toBe(true);
+    expect(isReadOnlyQuery("db.messages.aggregate([{$match: {}}])")).toBe(
+      true,
+    );
+    expect(isReadOnlyQuery("db.messages.countDocuments({})")).toBe(true);
+    expect(isReadOnlyQuery("messages.distinct('key')")).toBe(true);
+  });
+
+  it("flags MongoDB shell writes and destructive calls", () => {
+    expect(isReadOnlyQuery('db.messages.insertOne({"key":"abc"})')).toBe(
+      false,
+    );
+    expect(
+      isReadOnlyQuery("db.messages.updateOne({_id: 1}, {$set: {x: 1}})"),
+    ).toBe(false);
+    expect(isReadOnlyQuery("db.messages.deleteMany({})")).toBe(false);
+    expect(isReadOnlyQuery("db.messages.drop()")).toBe(false);
+  });
 });

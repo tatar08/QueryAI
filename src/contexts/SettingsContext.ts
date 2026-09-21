@@ -7,6 +7,7 @@ export type CopyFormat = "csv" | "json" | "sql-insert" | "markdown";
 export type AiProvider =
   | "openai"
   | "anthropic"
+  | "gemini"
   | "openrouter"
   | "ollama"
   | "custom-openai"

@@ -52,6 +52,10 @@ describe('settingsUI', () => {
       expect(getProviderLabel('openrouter' as AiProvider)).toBe('OpenRouter');
     });
 
+    it('should return correct label for Google Gemini', () => {
+      expect(getProviderLabel('gemini' as AiProvider)).toBe('Google Gemini');
+    });
+
     it('should return correct label for MiniMax', () => {
       expect(getProviderLabel('minimax' as AiProvider)).toBe('MiniMax');
     });

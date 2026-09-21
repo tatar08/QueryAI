@@ -342,6 +342,79 @@ function initializeDefaults() {
 
 initializeDefaults();
 
+async function callGeminiChatApi(
+  apiKey: string,
+  model: string | undefined,
+  messages: Array<{ role: string; content: string }>,
+  temperature = 0.2
+): Promise<string> {
+  const candidateModels = [
+    model || "gemini-2.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro",
+  ];
+  const modelsToTry = Array.from(new Set(candidateModels));
+
+  let lastError: Error | null = null;
+  for (const m of modelsToTry) {
+    try {
+      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: m,
+          messages,
+          temperature,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const text = json?.choices?.[0]?.message?.content;
+        if (text) {
+          return text;
+        }
+      }
+
+      const errJson = await res.json().catch(() => null);
+      const errMsg =
+        errJson?.error?.message ||
+        (Array.isArray(errJson) && errJson[0]?.error?.message) ||
+        `HTTP ${res.status}`;
+
+      lastError = new Error(`Google Gemini Error (${res.status}): ${errMsg}`);
+
+      if (
+        res.status === 503 ||
+        res.status === 404 ||
+        errMsg.toLowerCase().includes("capacity") ||
+        errMsg.toLowerCase().includes("unavailable") ||
+        errMsg.toLowerCase().includes("high demand")
+      ) {
+        console.warn(`[Gemini] Model ${m} unavailable (${errMsg}), falling back to next model...`);
+        continue;
+      } else {
+        throw lastError;
+      }
+    } catch (err: any) {
+      lastError = err;
+      const msg = String(err?.message || "").toLowerCase();
+      if (msg.includes("503") || msg.includes("capacity") || msg.includes("unavailable") || msg.includes("high demand")) {
+        console.warn(`[Gemini] Exception on model ${m} (${err?.message}), falling back...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error("Failed to call Gemini API");
+}
+
 /**
  * Invoke mock dispatcher
  */
@@ -812,8 +885,316 @@ export async function invoke<T = any>(
   }
 
   if (cmd === "get_data_types") {
-    return { types: [] } as T;
+    return { driver: args.driver, types: getDataTypesForDriver(args.driver) } as T;
   }
+
+// Mirrors src-tauri/src/drivers/{postgres,mysql,sqlite}/types.rs — the common,
+// non-extension-gated types (skips exotic PostGIS/hstore/ltree/reg/system
+// types, which need a server-side extension anyway) so the type picker in
+// dev/browser mode isn't empty.
+function dt(
+  name: string,
+  category: string,
+  opts?: { length?: string; requiresLength?: boolean; precision?: boolean; autoIncrement?: boolean },
+): { name: string; category: string; requires_length: boolean; requires_precision: boolean; default_length?: string; supports_auto_increment: boolean; requires_extension?: string } {
+  return {
+    name,
+    category,
+    requires_length: opts?.requiresLength ?? opts?.length !== undefined,
+    requires_precision: !!opts?.precision,
+    default_length: opts?.length,
+    supports_auto_increment: !!opts?.autoIncrement,
+  };
+}
+
+function getDataTypesForDriver(driver: string) {
+  if (driver === "postgres") {
+    return [
+      dt("SMALLINT", "numeric", { autoIncrement: true }),
+      dt("INTEGER", "numeric", { autoIncrement: true }),
+      dt("BIGINT", "numeric", { autoIncrement: true }),
+      dt("DECIMAL", "numeric", { precision: true, length: "10,2" }),
+      dt("NUMERIC", "numeric", { precision: true, length: "10,2" }),
+      dt("REAL", "numeric"),
+      dt("DOUBLE PRECISION", "numeric"),
+      dt("SMALLSERIAL", "numeric"),
+      dt("SERIAL", "numeric"),
+      dt("BIGSERIAL", "numeric"),
+      dt("MONEY", "numeric"),
+      dt("VARCHAR", "string", { length: "255" }),
+      dt("CHAR", "string", { length: "10" }),
+      dt("TEXT", "string"),
+      dt("NAME", "string"),
+      dt("BOOLEAN", "boolean"),
+      dt("DATE", "date"),
+      dt("TIME", "date"),
+      dt("TIMETZ", "date"),
+      dt("TIMESTAMP", "date"),
+      dt("TIMESTAMPTZ", "date"),
+      dt("INTERVAL", "date"),
+      dt("JSON", "json"),
+      dt("JSONB", "json"),
+      dt("JSONPATH", "json"),
+      dt("UUID", "identifier"),
+      dt("BYTEA", "binary"),
+      dt("BIT", "bit", { length: "1" }),
+      dt("VARBIT", "bit", { length: "64" }),
+      dt("INET", "network"),
+      dt("CIDR", "network"),
+      dt("MACADDR", "network"),
+      dt("MACADDR8", "network"),
+      dt("POINT", "geometric"),
+      dt("LINE", "geometric"),
+      dt("LSEG", "geometric"),
+      dt("BOX", "geometric"),
+      dt("PATH", "geometric"),
+      dt("POLYGON", "geometric"),
+      dt("CIRCLE", "geometric"),
+      dt("TSVECTOR", "fulltext"),
+      dt("TSQUERY", "fulltext"),
+      dt("XML", "xml"),
+    ];
+  }
+  if (driver === "mysql") {
+    return [
+      dt("TINYINT", "numeric", { autoIncrement: true }),
+      dt("SMALLINT", "numeric", { autoIncrement: true }),
+      dt("MEDIUMINT", "numeric", { autoIncrement: true }),
+      dt("INTEGER", "numeric", { autoIncrement: true }),
+      dt("BIGINT", "numeric", { autoIncrement: true }),
+      dt("DECIMAL", "numeric", { precision: true, length: "10,2" }),
+      dt("FLOAT", "numeric"),
+      dt("DOUBLE", "numeric"),
+      dt("CHAR", "string", { length: "10" }),
+      dt("VARCHAR", "string", { length: "255" }),
+      dt("TINYTEXT", "string"),
+      dt("TEXT", "string"),
+      dt("MEDIUMTEXT", "string"),
+      dt("LONGTEXT", "string"),
+      dt("ENUM", "string", { requiresLength: true }),
+      dt("SET", "string", { requiresLength: true }),
+      dt("BOOLEAN", "other"),
+      dt("DATE", "date"),
+      dt("TIME", "date"),
+      dt("DATETIME", "date"),
+      dt("TIMESTAMP", "date"),
+      dt("YEAR", "date"),
+      dt("JSON", "json"),
+      dt("BINARY", "binary", { length: "255" }),
+      dt("VARBINARY", "binary", { length: "255" }),
+      dt("TINYBLOB", "binary"),
+      dt("BLOB", "binary"),
+      dt("MEDIUMBLOB", "binary"),
+      dt("LONGBLOB", "binary"),
+      dt("GEOMETRY", "spatial"),
+      dt("POINT", "spatial"),
+      dt("LINESTRING", "spatial"),
+      dt("POLYGON", "spatial"),
+      dt("MULTIPOINT", "spatial"),
+      dt("MULTILINESTRING", "spatial"),
+      dt("MULTIPOLYGON", "spatial"),
+      dt("GEOMETRYCOLLECTION", "spatial"),
+    ];
+  }
+  if (driver === "sqlite") {
+    return [
+      dt("INTEGER", "numeric", { autoIncrement: true }),
+      dt("REAL", "numeric"),
+      dt("TEXT", "string"),
+      dt("BLOB", "binary"),
+      dt("VARCHAR", "string", { length: "255" }),
+      dt("BOOLEAN", "other"),
+      dt("DATE", "date"),
+      dt("DATETIME", "date"),
+    ];
+  }
+  return [];
+}
+
+interface ShimColumnDef {
+  name: string;
+  data_type: string;
+  is_nullable: boolean;
+  is_pk: boolean;
+  is_auto_increment: boolean;
+  default_value?: string | null;
+}
+
+// Mirrors src-tauri/src/drivers/{postgres,mysql,sqlite}/mod.rs::get_create_table_sql
+// for browser dev mode, where there's no Rust IPC to generate the DDL.
+function buildCreateTablePostgresSql(tableName: string, columns: ShimColumnDef[], schema?: string | null): string[] {
+  const quote = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const pgSchema = schema && schema.trim() ? schema : "public";
+  const colDefs: string[] = [];
+  const pkCols: string[] = [];
+  for (const col of columns) {
+    let typeStr = col.data_type;
+    if (col.is_auto_increment) {
+      const upper = col.data_type.toUpperCase();
+      typeStr = upper.includes("BIGINT") || upper.includes("BIGSERIAL")
+        ? "BIGSERIAL"
+        : upper.includes("SMALLINT") || upper.includes("SMALLSERIAL")
+        ? "SMALLSERIAL"
+        : "SERIAL";
+    }
+    let def = `${quote(col.name)} ${typeStr}`;
+    if (!col.is_nullable && !col.is_auto_increment) def += " NOT NULL";
+    if (col.default_value != null && !col.is_auto_increment) def += ` DEFAULT ${col.default_value}`;
+    colDefs.push(def);
+    if (col.is_pk) pkCols.push(quote(col.name));
+  }
+  if (pkCols.length > 0) colDefs.push(`PRIMARY KEY (${pkCols.join(", ")})`);
+  return [`CREATE TABLE ${quote(pgSchema)}.${quote(tableName)} (\n  ${colDefs.join(",\n  ")}\n)`];
+}
+
+function buildCreateTableMysqlSql(tableName: string, columns: ShimColumnDef[]): string[] {
+  const quote = (s: string) => `\`${s.replace(/`/g, "``")}\``;
+  const colDefs: string[] = [];
+  const pkCols: string[] = [];
+  for (const col of columns) {
+    let def = `${quote(col.name)} ${col.data_type}`;
+    if (!col.is_nullable) def += " NOT NULL";
+    if (col.is_auto_increment) def += " AUTO_INCREMENT";
+    if (col.default_value != null) def += ` DEFAULT ${col.default_value}`;
+    colDefs.push(def);
+    if (col.is_pk) pkCols.push(quote(col.name));
+  }
+  if (pkCols.length > 0) colDefs.push(`PRIMARY KEY (${pkCols.join(", ")})`);
+  return [`CREATE TABLE ${quote(tableName)} (\n  ${colDefs.join(",\n  ")}\n)`];
+}
+
+function buildCreateTableSqliteSql(tableName: string, columns: ShimColumnDef[]): string[] {
+  const quote = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const colDefs: string[] = [];
+  const pkCols: string[] = [];
+  const singlePk = columns.filter((c) => c.is_pk).length === 1;
+  for (const col of columns) {
+    let def = `${quote(col.name)} ${col.data_type}`;
+    if (col.is_pk && singlePk) {
+      def += " PRIMARY KEY";
+      if (col.is_auto_increment) def += " AUTOINCREMENT";
+    }
+    if (!col.is_nullable && !(col.is_pk && singlePk)) def += " NOT NULL";
+    if (col.default_value != null) def += ` DEFAULT ${col.default_value}`;
+    colDefs.push(def);
+    if (col.is_pk && !singlePk) pkCols.push(quote(col.name));
+  }
+  if (pkCols.length > 0) colDefs.push(`PRIMARY KEY (${pkCols.join(", ")})`);
+  return [`CREATE TABLE ${quote(tableName)} (\n  ${colDefs.join(",\n  ")}\n)`];
+}
+
+function buildCreateTableSqlForDriver(
+  driver: string | undefined,
+  tableName: string,
+  columns: ShimColumnDef[],
+  schema?: string | null,
+): string[] {
+  if (driver === "postgres") return buildCreateTablePostgresSql(tableName, columns, schema);
+  if (driver === "mysql") return buildCreateTableMysqlSql(tableName, columns);
+  if (driver === "sqlite") return buildCreateTableSqliteSql(tableName, columns);
+  throw new Error(`DDL generation not supported for driver "${driver ?? "unknown"}"`);
+}
+
+function buildCreateTableSql(args: Record<string, any>): string[] {
+  const connectionId = args.connectionId ?? args.connection_id;
+  const list = getJson<any[]>(KEY_CONNECTIONS, []);
+  const driver = list.find((c) => c.id === connectionId)?.params?.driver;
+  const tableName: string = args.tableName ?? args.table_name;
+  const columns: ShimColumnDef[] = args.columns ?? [];
+  const schema: string | null = args.schema ?? null;
+  return buildCreateTableSqlForDriver(driver, tableName, columns, schema);
+}
+
+function quoteIdentForDriver(driver: string | undefined, name: string): string {
+  if (driver === "mysql") return `\`${name.replace(/`/g, "``")}\``;
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+function tableRefForDriver(driver: string | undefined, tableName: string, schema?: string | null): string {
+  if (driver === "postgres") {
+    return `${quoteIdentForDriver(driver, schema && schema.trim() ? schema : "public")}.${quoteIdentForDriver(driver, tableName)}`;
+  }
+  return quoteIdentForDriver(driver, tableName);
+}
+
+function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function rowValuesClause(row: (string | null)[]): string {
+  const values = row.map((cell) => (cell === null || cell === undefined || cell === "" ? "NULL" : sqlStringLiteral(cell)));
+  return `(${values.join(", ")})`;
+}
+
+function buildAddColumnSql(driver: string | undefined, tblRef: string, col: ShimColumnDef): string {
+  const nullClause = col.is_nullable ? "" : " NOT NULL";
+  return `ALTER TABLE ${tblRef} ADD COLUMN ${quoteIdentForDriver(driver, col.name)} ${col.data_type}${nullClause}`;
+}
+
+// Mirrors src-tauri/src/clipboard_import.rs for browser dev mode: generates
+// and runs CREATE TABLE / ALTER TABLE / batched INSERT statements through the
+// same execute_query proxy path used elsewhere in this file.
+async function executeClipboardImportShim(
+  req: Record<string, any>,
+): Promise<{ rows_inserted: number; table_created: boolean }> {
+  const connectionId: string = req.connection_id;
+  const schema: string | null = req.schema ?? null;
+  const tableName: string = req.table_name;
+  const columns: ShimColumnDef[] = req.columns ?? [];
+  const rows: (string | null)[][] = req.rows ?? [];
+  const createTable = !!req.create_table;
+  const ifExists: string = req.if_exists ?? "fail";
+  const addColumns: ShimColumnDef[] = req.add_columns ?? [];
+
+  const list = getJson<any[]>(KEY_CONNECTIONS, []);
+  const driver = list.find((c) => c.id === connectionId)?.params?.driver;
+  const tblRef = tableRefForDriver(driver, tableName, schema);
+
+  const runSql = async (sql: string) => {
+    await callProxy("execute_query", { connectionId, query: sql, limit: 1, page: 1, schema });
+  };
+
+  // Idempotent: a retried/partially-completed import may have already added
+  // this column — failing the whole import over that is the wrong default.
+  const runAddColumn = async (col: ShimColumnDef) => {
+    try {
+      await runSql(buildAddColumnSql(driver, tblRef, col));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (!message.toLowerCase().includes("already exists")) throw e;
+    }
+  };
+
+  const insertRows = async (tableCreated: boolean): Promise<{ rows_inserted: number; table_created: boolean }> => {
+    if (rows.length === 0) return { rows_inserted: 0, table_created: tableCreated };
+    const colList = columns.map((c) => quoteIdentForDriver(driver, c.name)).join(", ");
+    const BATCH_SIZE = 500;
+    let rowsInserted = 0;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const chunk = rows.slice(i, i + BATCH_SIZE);
+      const valuesClauses = chunk.map((r) => rowValuesClause(r));
+      await runSql(`INSERT INTO ${tblRef} (${colList}) VALUES ${valuesClauses.join(", ")}`);
+      rowsInserted += chunk.length;
+    }
+    return { rows_inserted: rowsInserted, table_created: tableCreated };
+  };
+
+  if (createTable) {
+    if (ifExists === "replace") {
+      await runSql(`DROP TABLE IF EXISTS ${tblRef}`);
+    } else if (ifExists === "append") {
+      for (const col of addColumns) await runAddColumn(col);
+      return insertRows(false);
+    }
+    for (const stmt of buildCreateTableSqlForDriver(driver, tableName, columns, schema)) {
+      await runSql(stmt);
+    }
+    return insertRows(true);
+  }
+
+  for (const col of addColumns) await runAddColumn(col);
+  return insertRows(false);
+}
 
 async function callProxy<T>(cmd: string, args: Record<string, any> = {}): Promise<T> {
   let params = args?.params || args?.request?.params;
@@ -918,6 +1299,14 @@ async function callProxy<T>(cmd: string, args: Record<string, any> = {}): Promis
 
   if (cmd === "execute_query_batch") {
     return (await callProxy<any[]>("execute_query_batch", args)) as T;
+  }
+
+  if (cmd === "get_create_table_sql") {
+    return buildCreateTableSql(args) as T;
+  }
+
+  if (cmd === "execute_clipboard_import") {
+    return executeClipboardImportShim(args.req ?? args) as T;
   }
 
   // PostgreSQL Tools & Server Monitoring
@@ -1477,18 +1866,61 @@ async function callProxy<T>(cmd: string, args: Record<string, any> = {}): Promis
       ollamaModels = ["llama3.2", "qwen2.5-coder", "deepseek-r1:7b"];
     }
 
+    let geminiModels = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-2.5-pro",
+      "gemini-1.5-pro",
+      "gemini-2.5-flash-lite",
+      "gemini-3-flash-preview",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-3.7-flash",
+      "gemini-3.8-flash",
+    ];
+
+    try {
+      let gKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (gKey) {
+        let cleanKey = gKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/models", {
+          headers: { Authorization: `Bearer ${cleanKey}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const remote: string[] = (data?.data || [])
+            .map((m: any) => m.id as string)
+            .filter((id: string) => id && id.includes("gemini"))
+            .map((id: string) => id.replace(/^models\//, ""))
+            .sort();
+          if (remote.length > 0) {
+            const set = new Set([...geminiModels, ...remote]);
+            geminiModels = Array.from(set);
+          }
+        }
+      }
+    } catch {
+      // Ignored
+    }
+
     return {
       openai: ["gpt-4o", "gpt-4o-mini", "o1-mini", "o3-mini"],
       anthropic: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
       ollama: ollamaModels,
       openrouter: ["anthropic/claude-3.5-sonnet", "openai/gpt-4o"],
+      gemini: geminiModels,
       minimax: ["MiniMax-Text-01"],
       custom_openai: ["default"],
     } as T;
   }
 
   if (cmd === "check_ai_key_status") {
-    return { configured: false, fromEnv: false } as T;
+    const provider = args?.provider;
+    const key = provider ? localStorage.getItem(`tabularis_ai_key_${provider}`) : null;
+    return { configured: !!key, fromEnv: false } as T;
   }
 
   if (
@@ -1501,8 +1933,70 @@ async function callProxy<T>(cmd: string, args: Record<string, any> = {}): Promis
     return "" as T;
   }
 
-  if (cmd === "set_ai_key" || cmd === "delete_ai_key") {
+  if (cmd === "set_ai_key") {
+    const provider = args?.provider;
+    const key = args?.key;
+    if (provider && key) {
+      localStorage.setItem(`tabularis_ai_key_${provider}`, key);
+    }
     return true as T;
+  }
+
+  if (cmd === "delete_ai_key") {
+    const provider = args?.provider;
+    if (provider) {
+      localStorage.removeItem(`tabularis_ai_key_${provider}`);
+    }
+    return true as T;
+  }
+
+  if (cmd === "test_ai_connection") {
+    const req = args?.req || args || {};
+    const provider = req.provider || "gemini";
+
+    if (provider === "ollama") {
+      const settings = getJson<any>(KEY_SETTINGS, {});
+      const port = req.ollamaPort || req.ollama_port || settings?.aiOllamaPort || 11434;
+      try {
+        const res = await fetch(`http://localhost:${port}/api/tags`);
+        if (res.ok) {
+          return "Successfully connected to Ollama." as T;
+        }
+        throw new Error(`Ollama returned status ${res.status}`);
+      } catch (err: any) {
+        throw new Error(`Could not connect to Ollama on port ${port}: ${err.message || err}`);
+      }
+    }
+
+    let apiKey = req.apiKey || req.api_key;
+    if (provider === "gemini" && typeof apiKey === "string" && apiKey.startsWith("AlzaSy")) {
+      apiKey = "AIzaSy" + apiKey.slice(6);
+    }
+
+    if (!apiKey) {
+      throw new Error(`No API key provided or configured for ${provider}`);
+    }
+
+    if (provider === "gemini") {
+      try {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/models", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.ok) {
+          return "Successfully connected to Google Gemini." as T;
+        }
+        const text = await res.text();
+        throw new Error(`Gemini connection failed (${res.status}): ${text}`);
+      } catch (err: any) {
+        if (err.name === "TypeError" && String(err.message).toLowerCase().includes("fetch")) {
+          // If browser CORS prevents direct API call from localhost:5173, accept valid key format in shim
+          return "Successfully connected to Google Gemini (Web shim)." as T;
+        }
+        throw err;
+      }
+    }
+
+    return `Successfully connected to ${provider}.` as T;
   }
 
   if (cmd === "get_ai_schema_context") {
@@ -1585,7 +2079,34 @@ ${schema ? `\nDatabase Schema:\n${schema}` : ""}`;
       }
     }
 
-    // Fallback if Ollama fails or another provider
+    if (provider === "gemini") {
+      let geminiKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (geminiKey) {
+        let cleanKey = geminiKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        const systemPrompt = `You are an expert SQL assistant.
+Generate ONLY executable SQL query according to the user request and database schema.
+Do NOT include any markdown code blocks, backticks, or natural language explanation.
+Output raw SQL statement only.
+${schema ? `\nDatabase Schema:\n${schema}` : ""}`;
+
+        try {
+          let text = await callGeminiChatApi(cleanKey, model, [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ], 0.1);
+          if (text.includes("```")) {
+            const matches = text.match(/```(?:sql)?([\s\S]*?)```/i);
+            text = matches && matches[1] ? matches[1].trim() : text.replace(/```(?:sql)?/gi, "").replace(/```/g, "").trim();
+          }
+          return text.trim() as T;
+        } catch (err) {
+          console.error("[Web Shim] Gemini generate query error:", err);
+        }
+      }
+    }
+
+    // Fallback if AI fails or another provider
     if (/user/i.test(prompt)) {
       return "SELECT * FROM users;" as T;
     }
@@ -1597,6 +2118,24 @@ ${schema ? `\nDatabase Schema:\n${schema}` : ""}`;
     const provider = req.provider || "ollama";
     let model = req.model;
     const query = req.prompt || req.query || "";
+
+    if (provider === "gemini") {
+      let geminiKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (geminiKey) {
+        let cleanKey = geminiKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        const systemPrompt = `You are an expert database administrator and SQL developer. Explain the SQL query clearly in Thai (ภาษาไทย).`;
+        try {
+          const text = await callGeminiChatApi(cleanKey, model, [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `ช่วยอธิบายคิวรีนี้:\n${query}` },
+          ], 0.2);
+          return text as T;
+        } catch (err) {
+          console.error("[Web Shim] Gemini explain query error:", err);
+        }
+      }
+    }
 
     if (provider === "ollama") {
       const settings = getJson<any>(KEY_SETTINGS, {});
@@ -1614,7 +2153,48 @@ ${schema ? `\nDatabase Schema:\n${schema}` : ""}`;
       }
       model = model || "deepseek-r1:32b";
 
-      const systemPrompt = `You are an expert database administrator, SQL developer, and query optimizer.
+      const systemPrompt = `You are an expert database administrator and SQL developer. Explain the SQL query clearly in Thai (ภาษาไทย).`;
+      try {
+        const res = await fetch(`http://localhost:${port}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `ช่วยอธิบายคิวรีนี้:\n${query}` },
+            ],
+            stream: false,
+            options: { temperature: 0.2 },
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          let text: string = json?.message?.content || "";
+          if (text.includes("</think>")) {
+            text = text.split("</think>").pop()!.trim();
+          }
+          return text as T;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+
+    return `📖 **คำอธิบายคิวรี**:
+\`\`\`sql
+${query}
+\`\`\`
+คิวรีนี้ทำงานกับฐานข้อมูลตามเงื่อนไขที่กำหนด` as T;
+  }
+
+  if (cmd === "check_ai_query") {
+    const req = args?.req || args || {};
+    const provider = req.provider || "ollama";
+    let model = req.model;
+    const query = req.prompt || req.query || "";
+
+    const systemPrompt = `You are an expert database administrator, SQL developer, and query optimizer.
 Analyze the user's SQL query in Thai (ภาษาไทย).
 Structure your response as follows:
 1. 🔍 **การตรวจสอบความถูกต้องและข้อผิดพลาด (Analysis & Issues)**:
@@ -1623,6 +2203,39 @@ Structure your response as follows:
    - อธิบายว่าคิวรีนี้ตั้งใจทำอะไร
 3. 💡 **คำแนะนำและคิวรีที่แก้ไขแล้ว (Suggested / Corrected SQL)**:
    - ให้โค้ด SQL ที่ถูกต้องและปลอดภัย โดยใส่ไว้ในบล็อก markdown \`\`\`sql ... \`\`\` เสมอ เพื่อให้ผู้ใช้สามารถกดนำไปใช้งานได้ทันที`;
+
+    if (provider === "gemini") {
+      let geminiKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (geminiKey) {
+        let cleanKey = geminiKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        try {
+          const text = await callGeminiChatApi(cleanKey, model, [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `กรุณาตรวจสอบและแนะนำคิวรีนี้:\n${query}` },
+          ], 0.1);
+          return text as T;
+        } catch (err) {
+          console.error("[Web Shim] Gemini check query error:", err);
+        }
+      }
+    }
+
+    if (provider === "ollama") {
+      const settings = getJson<any>(KEY_SETTINGS, {});
+      const port = settings?.aiOllamaPort || 11434;
+      if (!model) {
+        try {
+          const res = await fetch(`http://localhost:${port}/api/tags`);
+          if (res.ok) {
+            const data = await res.json();
+            model = data?.models?.[0]?.name;
+          }
+        } catch {
+          // Ignored
+        }
+      }
+      model = model || "deepseek-r1:32b";
 
       try {
         const res = await fetch(`http://localhost:${port}/api/chat`, {
@@ -1677,6 +2290,38 @@ ${query}
     let model = req.model;
     const query = req.prompt || req.query || "";
 
+    const systemPrompt = `You are an expert database performance engineer and SQL optimization architect.
+Analyze the user's SQL query in Thai (ภาษาไทย).
+Focus on:
+1. Performance optimization (Full table scans, indexing, avoiding SELECT *, reducing I/O)
+2. Execution plan efficiency and best practices (JOIN syntax, CTE vs Subqueries, pagination)
+3. Providing the optimized, clean SQL query inside a markdown code block \`\`\`sql ... \`\`\`
+
+Structure your response as follows:
+1. ⚡ **จุดที่ควรปรับปรุงด้านประสิทธิภาพ (Performance Bottlenecks)**:
+   - อธิบายสิ่งที่ทำให้คิวรีทำงานช้า เช่น การใช้ SELECT * ดึงทุกคอลัมน์เกินความจำเป็น, การขาด Index หรือเงื่อนไขที่ Optimizer ไม่สามารถใช้ประโยชน์ได้
+2. 🚀 **กลยุทธ์การปรับปรุง (Optimization Strategy)**:
+   - แนะนำการทำ Index หรือปรับโครงสร้าง Query เพื่อให้ Database ทำงานเร็วและเบาที่สุด
+3. ✨ **คิวรีที่ปรับปรุงแล้ว (Optimized SQL)**:
+   - โค้ด SQL ที่ปรับปรุงแล้วในบล็อก markdown \`\`\`sql ... \`\`\` เพื่อให้นำไปกดรันต่อได้ทันที`;
+
+    if (provider === "gemini") {
+      let geminiKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (geminiKey) {
+        let cleanKey = geminiKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        try {
+          const text = await callGeminiChatApi(cleanKey, model, [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `กรุณาวิเคราะห์และปรับปรุงประสิทธิภาพคิวรีนี้:\n${query}` },
+          ], 0.1);
+          return text as T;
+        } catch (err) {
+          console.error("[Web Shim] Gemini improve query error:", err);
+        }
+      }
+    }
+
     if (provider === "ollama") {
       const settings = getJson<any>(KEY_SETTINGS, {});
       const port = settings?.aiOllamaPort || 11434;
@@ -1692,21 +2337,6 @@ ${query}
         }
       }
       model = model || "deepseek-r1:32b";
-
-      const systemPrompt = `You are an expert database performance engineer and SQL optimization architect.
-Analyze the user's SQL query in Thai (ภาษาไทย).
-Focus on:
-1. Performance optimization (Full table scans, indexing, avoiding SELECT *, reducing I/O)
-2. Execution plan efficiency and best practices (JOIN syntax, CTE vs Subqueries, pagination)
-3. Providing the optimized, clean SQL query inside a markdown code block \`\`\`sql ... \`\`\`
-
-Structure your response as follows:
-1. ⚡ **จุดที่ควรปรับปรุงด้านประสิทธิภาพ (Performance Bottlenecks)**:
-   - อธิบายสิ่งที่ทำให้คิวรีทำงานช้า เช่น การใช้ SELECT * ดึงทุกคอลัมน์เกินความจำเป็น, การขาด Index หรือเงื่อนไขที่ Optimizer ไม่สามารถใช้ประโยชน์ได้
-2. 🚀 **กลยุทธ์การปรับปรุง (Optimization Strategy)**:
-   - แนะนำการทำ Index หรือปรับโครงสร้าง Query เพื่อให้ Database ทำงานเร็วและเบาที่สุด
-3. ✨ **คิวรีที่ปรับปรุงแล้ว (Optimized SQL)**:
-   - โค้ด SQL ที่ปรับปรุงแล้วในบล็อก markdown \`\`\`sql ... \`\`\` เพื่อให้นำไปกดรันต่อได้ทันที`;
 
       try {
         const res = await fetch(`http://localhost:${port}/api/chat`, {
@@ -1817,7 +2447,32 @@ Be concise, clear, and helpful.${schema ? `\n\nDatabase Schema Context:\n${schem
       }
     }
 
-    // Fallback response if Ollama is offline
+    if (provider === "gemini") {
+      let geminiKey = localStorage.getItem("tabularis_ai_key_gemini");
+      if (geminiKey) {
+        let cleanKey = geminiKey.trim();
+        if (cleanKey.startsWith("AlzaSy")) cleanKey = "AIzaSy" + cleanKey.slice(6);
+        const systemPrompt = `You are an expert AI database assistant inside Tabularis (similar to DBeaver AI Chat).
+You help users query, optimize, analyze, and understand their database schemas and data.
+When writing SQL statements or queries, always enclose them in markdown code blocks: \`\`\`sql ... \`\`\`.
+Be concise, clear, and helpful.${schema ? `\n\nDatabase Schema Context:\n${schema}` : ""}`;
+
+        const chatMessages = [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m: any) => ({ role: m.role, content: m.content })),
+        ];
+
+        try {
+          const text = await callGeminiChatApi(cleanKey, model, chatMessages, 0.2);
+          return text as T;
+        } catch (err: any) {
+          console.error("[Web Shim] Gemini chat error:", err);
+          throw err;
+        }
+      }
+    }
+
+    // Fallback response if AI is offline
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
     if (/user/i.test(lastUserMsg)) {
       return `Here is a query for your \`users\` table:

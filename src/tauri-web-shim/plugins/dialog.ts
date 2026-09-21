@@ -2,6 +2,8 @@
  * Tauri Dialog Plugin Mock for Browser / Web Mode
  */
 
+import { registerPickedFile } from "./fs";
+
 export interface OpenDialogOptions {
   title?: string;
   filters?: Array<{ name: string; extensions: string[] }>;
@@ -48,11 +50,20 @@ export async function open(options?: OpenDialogOptions): Promise<string | string
 
     input.onchange = () => {
       if (input.files && input.files.length > 0) {
-        if (options?.multiple) {
-          resolve(Array.from(input.files).map((f) => f.name));
-        } else {
-          resolve(input.files[0].name);
-        }
+        const files = Array.from(input.files);
+        // Stash real content now — the File objects only exist for this
+        // change event, but readTextFile/readFile(name) is called later.
+        void Promise.all(
+          files.map(async (f) => {
+            registerPickedFile(f.name, new Uint8Array(await f.arrayBuffer()));
+          }),
+        ).then(() => {
+          if (options?.multiple) {
+            resolve(files.map((f) => f.name));
+          } else {
+            resolve(files[0].name);
+          }
+        });
       } else {
         resolve(null);
       }

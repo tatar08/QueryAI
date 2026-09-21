@@ -79,19 +79,65 @@ async function handleMongoCommand(cmd: string, args: any, params: any): Promise<
       }));
     }
 
+interface MongoShellCall {
+  method: string;
+  argsRaw: string;
+}
+
+// Splits a `db.collection.method(args).method(args)...` shell string into its
+// collection name and an ordered list of chained calls, tracking paren depth
+// (and skipping over string-literal contents) so `.find({...}).sort({...})`
+// isn't swallowed whole by a single greedy `.find\((.*)\)` regex — that used
+// to capture everything through the LAST `)` in the statement, folding the
+// trailing `.sort(...)` into the find filter and breaking its JSON parsing.
+function parseMongoShellChain(rawQuery: string): { collection: string; calls: MongoShellCall[] } | null {
+  const q = rawQuery.trim().replace(/;\s*$/, '');
+  const collMatch = /^(?:db\s*\.\s*)?([a-zA-Z_][a-zA-Z0-9_-]*)\s*\./.exec(q);
+  if (!collMatch) return null;
+
+  const collection = collMatch[1];
+  let rest = q.slice(collMatch[0].length);
+  const calls: MongoShellCall[] = [];
+
+  while (rest.length > 0) {
+    const methodMatch = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/.exec(rest);
+    if (!methodMatch) break;
+
+    let depth = 1;
+    let inString: string | null = null;
+    let escaped = false;
+    let i = methodMatch[0].length;
+    const argsStart = i;
+    for (; i < rest.length && depth > 0; i++) {
+      const ch = rest[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === inString) inString = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === '`') inString = ch;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    }
+    if (depth !== 0) break; // unbalanced parens — bail out of chain parsing
+
+    calls.push({ method: methodMatch[1], argsRaw: rest.slice(argsStart, i - 1) });
+    rest = rest.slice(i);
+
+    const dotMatch = /^\s*\.\s*/.exec(rest);
+    if (!dotMatch) break;
+    rest = rest.slice(dotMatch[0].length);
+  }
+
+  return calls.length > 0 ? { collection, calls } : null;
+}
+
 async function runMongoQuery(db: any, rawQuery: string): Promise<{ columns: string[]; rows: unknown[][]; affected_rows: number }> {
   const q = (rawQuery || '').trim();
   if (!q) {
     return { columns: [], rows: [], affected_rows: 0 };
   }
-
-  let docs: any[] = [];
-  const matchFind = q.match(/^(?:db\.)?([a-zA-Z0-9_-]+)\.find\((.*)\)/s);
-  const matchAggregate = q.match(/^(?:db\.)?([a-zA-Z0-9_-]+)\.aggregate\((.*)\)/s);
-  const matchInsert = q.match(/^(?:db\.)?([a-zA-Z0-9_-]+)\.insertOne\((.*)\)/s);
-  const matchUpdate = q.match(/^(?:db\.)?([a-zA-Z0-9_-]+)\.update(?:Many|One)?\((.*)\)/s);
-  const matchDelete = q.match(/^(?:db\.)?([a-zA-Z0-9_-]+)\.delete(?:Many|One)?\((.*)\)/s);
-  const matchSql = q.match(/^SELECT\s+.*?\s+FROM\s+(?:["`']?[a-zA-Z0-9_-]+["`']?\.)?["`']?([a-zA-Z0-9_-]+)["`']?/i);
 
   function evalArg(argStr: string): any {
     const trimmed = (argStr || '').trim();
@@ -103,50 +149,87 @@ async function runMongoQuery(db: any, rawQuery: string): Promise<{ columns: stri
     }
   }
 
-  if (matchFind) {
-    const coll = matchFind[1];
-    const filter = evalArg(matchFind[2]);
-    docs = await db.collection(coll).find(filter).limit(1000).toArray();
-  } else if (matchAggregate) {
-    const coll = matchAggregate[1];
-    const pipeline = evalArg(matchAggregate[2]);
-    docs = await db.collection(coll).aggregate(Array.isArray(pipeline) ? pipeline : [pipeline]).toArray();
-  } else if (matchInsert) {
-    const coll = matchInsert[1];
-    const doc = evalArg(matchInsert[2]);
-    const res = await db.collection(coll).insertOne(doc);
-    docs = [{ acknowledged: res.acknowledged, insertedId: res.insertedId }];
-  } else if (matchUpdate) {
-    const coll = matchUpdate[1];
-    const args = evalArg(`[${matchUpdate[2]}]`);
-    const filter = args[0] || {};
-    const update = args[1] || {};
-    const res = await db.collection(coll).updateMany(filter, update);
-    docs = [{ acknowledged: res.acknowledged, matchedCount: res.matchedCount, modifiedCount: res.modifiedCount }];
-  } else if (matchDelete) {
-    const coll = matchDelete[1];
-    const filter = evalArg(matchDelete[2]);
-    const res = await db.collection(coll).deleteMany(filter);
-    docs = [{ acknowledged: res.acknowledged, deletedCount: res.deletedCount }];
-  } else if (matchSql) {
-    const coll = matchSql[1];
-    let limit = 1000;
-    const limitMatch = q.match(/LIMIT\s+(\d+)/i);
-    if (limitMatch) {
-      limit = parseInt(limitMatch[1], 10);
+  const matchSql = q.match(/^SELECT\s+.*?\s+FROM\s+(?:["`']?[a-zA-Z0-9_-]+["`']?\.)?["`']?([a-zA-Z0-9_-]+)["`']?/i);
+  const chain = parseMongoShellChain(q);
+
+  let docs: any[] = [];
+
+  if (chain) {
+    const { collection, calls } = chain;
+    const [entry, ...modifiers] = calls;
+
+    if (entry.method === 'find') {
+      const filter = evalArg(entry.argsRaw);
+      let cursor = db.collection(collection).find(filter);
+      for (const { method, argsRaw } of modifiers) {
+        if (method === 'sort') cursor = cursor.sort(evalArg(argsRaw));
+        else if (method === 'limit') cursor = cursor.limit(Number(evalArg(argsRaw)));
+        else if (method === 'skip') cursor = cursor.skip(Number(evalArg(argsRaw)));
+        else if (method === 'project') cursor = cursor.project(evalArg(argsRaw));
+        // toArray/pretty/forEach/count etc. are terminal — ignored here since
+        // the result is always materialized via toArray() below.
+      }
+      docs = await cursor.limit(1000).toArray();
+    } else if (entry.method === 'findOne') {
+      const filter = evalArg(entry.argsRaw);
+      const doc = await db.collection(collection).findOne(filter);
+      docs = doc ? [doc] : [];
+    } else if (entry.method === 'aggregate') {
+      const pipeline = evalArg(entry.argsRaw);
+      docs = await db.collection(collection).aggregate(Array.isArray(pipeline) ? pipeline : [pipeline]).toArray();
+    } else if (entry.method === 'countDocuments' || entry.method === 'count') {
+      const filter = evalArg(entry.argsRaw);
+      const count = await db.collection(collection).countDocuments(filter);
+      docs = [{ count }];
+    } else if (entry.method === 'distinct') {
+      const args = evalArg(`[${entry.argsRaw}]`);
+      const values = await db.collection(collection).distinct(args[0], args[1] || {});
+      docs = values.map((v: unknown) => ({ value: v }));
+    } else if (entry.method === 'insertOne') {
+      const doc = evalArg(entry.argsRaw);
+      const res = await db.collection(collection).insertOne(doc);
+      docs = [{ acknowledged: res.acknowledged, insertedId: res.insertedId }];
+    } else if (entry.method === 'insertMany') {
+      const docsArg = evalArg(entry.argsRaw);
+      const res = await db.collection(collection).insertMany(docsArg);
+      docs = [{ acknowledged: res.acknowledged, insertedCount: res.insertedCount }];
+    } else if (entry.method === 'updateOne' || entry.method === 'updateMany') {
+      const args = evalArg(`[${entry.argsRaw}]`);
+      const filter = args[0] || {};
+      const update = args[1] || {};
+      const res = await db.collection(collection)[entry.method](filter, update);
+      docs = [{ acknowledged: res.acknowledged, matchedCount: res.matchedCount, modifiedCount: res.modifiedCount }];
+    } else if (entry.method === 'deleteOne' || entry.method === 'deleteMany') {
+      const filter = evalArg(entry.argsRaw);
+      const res = await db.collection(collection)[entry.method](filter);
+      docs = [{ acknowledged: res.acknowledged, deletedCount: res.deletedCount }];
+    } else if (entry.method === 'drop') {
+      const res = await db.collection(collection).drop();
+      docs = [{ acknowledged: res }];
     }
-    docs = await db.collection(coll).find({}).limit(limit).toArray();
-  } else if (q.startsWith('{')) {
-    const parsed = JSON.parse(q);
-    if (parsed.collection) {
-      docs = await db.collection(parsed.collection).find(parsed.filter || {}).limit(1000).toArray();
-    } else {
-      const cmdRes = await db.command(parsed);
-      docs = [cmdRes];
+  }
+
+  if (docs.length === 0 && !chain) {
+    if (matchSql) {
+      const coll = matchSql[1];
+      let limit = 1000;
+      const limitMatch = q.match(/LIMIT\s+(\d+)/i);
+      if (limitMatch) {
+        limit = parseInt(limitMatch[1], 10);
+      }
+      docs = await db.collection(coll).find({}).limit(limit).toArray();
+    } else if (q.startsWith('{')) {
+      const parsed = JSON.parse(q);
+      if (parsed.collection) {
+        docs = await db.collection(parsed.collection).find(parsed.filter || {}).limit(1000).toArray();
+      } else {
+        const cmdRes = await db.command(parsed);
+        docs = [cmdRes];
+      }
+    } else if (q) {
+      const collName = q.replace(/;$/, '').trim();
+      docs = await db.collection(collName).find({}).limit(1000).toArray();
     }
-  } else if (q) {
-    const collName = q.replace(/;$/, '').trim();
-    docs = await db.collection(collName).find({}).limit(1000).toArray();
   }
 
   const colSet = new Set<string>();
@@ -160,6 +243,37 @@ async function runMongoQuery(db: any, rawQuery: string): Promise<{ columns: stri
   });
   const columns = Array.from(colSet);
 
+  // Converts BSON-specific leaf types (ObjectId, Date, Decimal128, Binary, …)
+  // to plain values, but recurses into plain objects/arrays instead of
+  // JSON.stringify-ing them: keeping them as real objects lets the grid treat
+  // nested documents as JSON cells (double-click viewer, tree expand) the same
+  // way it already does for Postgres JSONB — a pre-stringified string cell
+  // never satisfies that check.
+  function sanitizeBsonValue(val: unknown): unknown {
+    if (val === null || val === undefined) return null;
+    if (val instanceof Date) return val.toISOString();
+    if (typeof val === 'bigint') return val.toString();
+    if (Array.isArray(val)) return val.map(sanitizeBsonValue);
+    if (typeof val === 'object') {
+      const anyVal = val as any;
+      if (anyVal._bsontype === 'ObjectID' || anyVal.constructor?.name === 'ObjectId') {
+        return anyVal.toString();
+      }
+      if (anyVal._bsontype === 'Decimal128' || anyVal.constructor?.name === 'Decimal128') {
+        return anyVal.toString();
+      }
+      if (typeof anyVal.toHexString === 'function') {
+        return anyVal.toString();
+      }
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(anyVal)) {
+        out[k] = sanitizeBsonValue(anyVal[k]);
+      }
+      return out;
+    }
+    return val;
+  }
+
   const rows = docs.map((doc: any) => {
     if (!doc || typeof doc !== 'object') {
       return [String(doc)];
@@ -167,18 +281,10 @@ async function runMongoQuery(db: any, rawQuery: string): Promise<{ columns: stri
     return columns.map((col) => {
       const val = doc[col];
       if (val === undefined) return null;
-      if (val && typeof val === 'object') {
-        if (val._bsontype === 'ObjectID' || val.constructor?.name === 'ObjectId') {
-          return val.toString();
-        }
-        if (val instanceof Date) {
-          return val.toISOString();
-        }
-        return JSON.stringify(val);
-      }
-      return val;
+      return sanitizeBsonValue(val);
     });
   });
+
 
   return {
     columns: columns.length > 0 ? columns : ['result'],

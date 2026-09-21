@@ -31,6 +31,8 @@ export function getProviderLabel(id: AiProvider): string {
       return 'OpenAI';
     case 'anthropic':
       return 'Anthropic';
+    case 'gemini':
+      return 'Google Gemini';
     case 'openrouter':
       return 'OpenRouter';
     case 'ollama':

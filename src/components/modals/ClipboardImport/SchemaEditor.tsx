@@ -93,6 +93,17 @@ export function SchemaEditor({
     setSelected(new Set());
   };
 
+  // Append mode's Target-column dropdown defaults every unmatched source
+  // column to "Skip" — flipping 16+ of them one at a time in a small panel
+  // is the exact pain point this bulk action removes.
+  const handleBulkMarkAsNew = () => {
+    if (selected.size === 0) return;
+    for (const i of selected) {
+      onColumnChange(i, { targetColumn: null, isNewColumn: true });
+    }
+    setSelected(new Set());
+  };
+
   const handleSingleDelete = (i: number) => {
     onDeleteColumns([i]);
     setSelected(new Set());
@@ -107,6 +118,14 @@ export function SchemaEditor({
               {t('clipboardImport.nSelected', { count: selected.size })}
             </span>
             <div className="flex items-center gap-2">
+              {isAppend && (
+                <button
+                  onClick={handleBulkMarkAsNew}
+                  className="flex items-center gap-1.5 px-2 py-1 text-xs bg-blue-900/30 hover:bg-blue-900/50 border border-blue-800/40 text-blue-300 rounded transition-colors"
+                >
+                  {t('clipboardImport.markSelectedAsNew', { defaultValue: 'Create new column' })}
+                </button>
+              )}
               <button
                 onClick={handleBulkDelete}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs bg-red-900/30 hover:bg-red-900/50 border border-red-800/40 text-red-300 rounded transition-colors"

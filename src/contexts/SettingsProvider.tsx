@@ -195,16 +195,23 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
             if (hasAnthropic) {
               detectedProvider = "anthropic";
             } else {
-              const hasOpenRouter = await invoke<boolean>("check_ai_key", {
-                provider: "openrouter",
+              const hasGemini = await invoke<boolean>("check_ai_key", {
+                provider: "gemini",
               });
-              if (hasOpenRouter) detectedProvider = "openrouter";
-            else {
-              const hasMiniMax = await invoke<boolean>("check_ai_key", {
-                provider: "minimax",
-              });
-              if (hasMiniMax) detectedProvider = "minimax";
-            }
+              if (hasGemini) {
+                detectedProvider = "gemini";
+              } else {
+                const hasOpenRouter = await invoke<boolean>("check_ai_key", {
+                  provider: "openrouter",
+                });
+                if (hasOpenRouter) detectedProvider = "openrouter";
+                else {
+                  const hasMiniMax = await invoke<boolean>("check_ai_key", {
+                    provider: "minimax",
+                  });
+                  if (hasMiniMax) detectedProvider = "minimax";
+                }
+              }
             }
           }
 
@@ -217,7 +224,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
             // Only set provider if not already set
             if (!finalSettings.aiProvider) {
-              finalSettings.aiProvider = detectedProvider as "openai" | "anthropic" | "openrouter" | "minimax";
+              finalSettings.aiProvider = detectedProvider as "openai" | "anthropic" | "gemini" | "openrouter" | "minimax";
             }
             // Only set model if not already set AND we have a model available
             if (!finalSettings.aiModel && firstModel) {

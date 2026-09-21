@@ -12,9 +12,12 @@ import {
   ChevronRight,
   Rows,
   Table2,
+  FileText,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readTextFile } from '@tauri-apps/plugin-fs';
 import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { useDatabase } from '../../hooks/useDatabase';
@@ -29,12 +32,17 @@ import type { TableColumn } from '../../utils/sqlGenerator';
 import {
   parseClipboardText,
   reParseWithHeaderOption,
+  parseMultipleFiles,
+  parseMultipleFilesWithSchemas,
+  detectFileColumnCounts,
   type ParsedClipboardData,
   type InferredColumn,
+  type FileImportSource,
 } from '../../utils/clipboardParser';
 
 type ImportMode = 'create' | 'append';
 type IfExistsStrategy = 'fail' | 'append' | 'replace';
+type ImportSource = 'clipboard' | 'files';
 
 interface ClipboardImportModalProps {
   isOpen: boolean;
@@ -66,6 +74,19 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
   const [existingTables, setExistingTables] = useState<string[]>([]);
   const [maximizedPane, setMaximizedPane] = useState<'schema' | 'preview' | null>(null);
   const [targetColumns, setTargetColumns] = useState<TableColumn[]>([]);
+
+  const [importSource, setImportSource] = useState<ImportSource>('clipboard');
+  const [importedFiles, setImportedFiles] = useState<FileImportSource[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  // Populated when picked files span more than one column-count shape (e.g. a
+  // 15-column export mixed with a 14-column one) — lets the user name each
+  // shape's columns explicitly instead of merging them by raw position.
+  const [fileShapes, setFileShapes] = useState<Map<number, string[]> | null>(null);
+  const [shapeNamesInput, setShapeNamesInput] = useState<Record<number, string>>({});
+  // Collapsed once names are applied, since the panel is tall and (once set
+  // up) rarely needs revisiting — keeping it open otherwise squeezes the
+  // Review & Adjust section down to a couple of visible rows.
+  const [shapesCollapsed, setShapesCollapsed] = useState(false);
 
   const [isLoadingClipboard, setIsLoadingClipboard] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -126,6 +147,69 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
     }
   }, [t, toSchemaColumns]);
 
+  // Lets the user pick one or more CSV/TXT files from disk. When several are
+  // picked, their rows are merged into one dataset with a trailing column
+  // recording each row's originating file name (parseMultipleFiles).
+  const pickAndImportFiles = useCallback(async () => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const picked = await open({
+        multiple: true,
+        filters: [{ name: 'CSV / Text', extensions: ['csv', 'txt', 'tsv'] }],
+      });
+      if (!picked) return;
+      const filePaths = Array.isArray(picked) ? picked : [picked];
+      if (filePaths.length === 0) return;
+
+      setIsLoadingFiles(true);
+      const files: FileImportSource[] = await Promise.all(
+        filePaths.map(async (p) => ({
+          name: p.split(/[\\/]/).pop() ?? p,
+          text: await readTextFile(p),
+        })),
+      );
+      setImportedFiles(files);
+      const shapes = detectFileColumnCounts(files);
+      // Always offer the naming panel, even for a single shape — it's the
+      // only way to name headerless-file columns properly; "First row as
+      // header" would otherwise pick up an actual data row as headers.
+      setFileShapes(shapes);
+      setShapeNamesInput({});
+      setShapesCollapsed(false);
+      const result = parseMultipleFiles(files);
+      setParsed(result);
+      const mapped = await toSchemaColumns(result.inferredColumns);
+      setColumns(mapped);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : t('clipboardImport.fileReadError', { defaultValue: 'Failed to read selected files' }),
+      );
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  }, [t, toSchemaColumns]);
+
+  // Re-merges the picked files using the per-shape column names the user typed
+  // into fileShapes' inputs, aligning rows by name instead of raw position.
+  const applyNamedSchemas = useCallback(async () => {
+    if (!fileShapes) return;
+    const namesByCount: Record<number, string[]> = {};
+    for (const count of fileShapes.keys()) {
+      const raw = shapeNamesInput[count]?.trim();
+      if (!raw) continue;
+      namesByCount[count] = raw.split(',').map((n) => n.trim()).filter(Boolean);
+    }
+    if (Object.keys(namesByCount).length === 0) return;
+    const result = parseMultipleFilesWithSchemas(importedFiles, namesByCount);
+    setParsed(result);
+    const mapped = await toSchemaColumns(result.inferredColumns);
+    setColumns(mapped);
+    setShapesCollapsed(true);
+  }, [fileShapes, shapeNamesInput, importedFiles, toSchemaColumns]);
+
   // Load existing tables for conflict detection
   const loadTables = useCallback(async () => {
     if (!activeConnectionId) return;
@@ -150,6 +234,10 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
       setWarningsExpanded(false);
       setMaximizedPane(null);
       setTargetColumns([]);
+      setImportSource('clipboard');
+      setImportedFiles([]);
+      setFileShapes(null);
+      setShapeNamesInput({});
       readClipboard();
       loadTables();
     }
@@ -221,13 +309,21 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
 
   const handleHeaderToggle = useCallback(
     async (hasHeader: boolean) => {
+      if (importSource === 'files') {
+        if (importedFiles.length === 0) return;
+        const reparsed = parseMultipleFiles(importedFiles, { hasHeaderRow: hasHeader });
+        setParsed(reparsed);
+        const mapped = await toSchemaColumns(reparsed.inferredColumns);
+        setColumns(mapped);
+        return;
+      }
       if (!parsed || !rawText) return;
       const reparsed = reParseWithHeaderOption(rawText, hasHeader, parsed);
       setParsed(reparsed);
       const mapped = await toSchemaColumns(reparsed.inferredColumns);
       setColumns(mapped);
     },
-    [parsed, rawText, toSchemaColumns]
+    [importSource, importedFiles, parsed, rawText, toSchemaColumns]
   );
 
   const handleAiSuggest = useCallback(async () => {
@@ -366,17 +462,76 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <div className="min-w-0">
                 <h2 id={titleId} className="text-base font-semibold text-primary leading-tight">
-                  {t('clipboardImport.title')}
+                  {importSource === 'files'
+                    ? t('clipboardImport.titleFiles', { defaultValue: 'Import from File(s)' })
+                    : t('clipboardImport.title')}
                 </h2>
                 <p id={descriptionId} className="text-[11px] text-muted leading-relaxed">
-                  {t('clipboardImport.subtitle')}
+                  {importSource === 'files'
+                    ? t('clipboardImport.subtitleFiles', {
+                        defaultValue:
+                          'Pick one or more CSV/TXT files. When several are selected, rows are merged and a "source_file" column is appended.',
+                      })
+                    : t('clipboardImport.subtitle')}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-200">
-                  <Clipboard size={12} className="shrink-0" />
-                  <span>{selectedModeHint}</span>
+                <div className="inline-flex items-center gap-0.5 bg-surface-secondary border border-default rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setImportSource('clipboard')}
+                    className={`px-2.5 py-1 text-[11px] rounded-md flex items-center gap-1.5 transition-colors ${
+                      importSource === 'clipboard'
+                        ? 'bg-base text-primary border border-strong'
+                        : 'text-secondary hover:bg-surface-tertiary border border-transparent'
+                    }`}
+                  >
+                    <Clipboard size={12} />
+                    {t('clipboardImport.sourceClipboard', { defaultValue: 'Clipboard' })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportSource('files')}
+                    className={`px-2.5 py-1 text-[11px] rounded-md flex items-center gap-1.5 transition-colors ${
+                      importSource === 'files'
+                        ? 'bg-base text-primary border border-strong'
+                        : 'text-secondary hover:bg-surface-tertiary border border-transparent'
+                    }`}
+                  >
+                    <FileText size={12} />
+                    {t('clipboardImport.sourceFiles', { defaultValue: 'File(s)' })}
+                  </button>
                 </div>
+                {importSource === 'files' && (
+                  <button
+                    type="button"
+                    onClick={pickAndImportFiles}
+                    disabled={isLoadingFiles}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-200 hover:bg-indigo-500/20 transition-colors disabled:opacity-50"
+                  >
+                    {isLoadingFiles ? (
+                      <Loader2 size={12} className="animate-spin shrink-0" />
+                    ) : (
+                      <Upload size={12} className="shrink-0" />
+                    )}
+                    {importedFiles.length > 0
+                      ? t('clipboardImport.chooseFilesAgain', { defaultValue: 'Choose files...' })
+                      : t('clipboardImport.chooseFiles', { defaultValue: 'Choose CSV/TXT files...' })}
+                  </button>
+                )}
+                {importSource === 'files' && importedFiles.length > 0 && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-default bg-base/70 px-2.5 py-1 text-[11px] text-secondary">
+                    <FileText size={12} className="text-blue-400 shrink-0" />
+                    <span className="text-primary font-medium">{importedFiles.length}</span>
+                    <span>{t('clipboardImport.filesLabel', { defaultValue: 'file(s)' })}</span>
+                  </div>
+                )}
+                {importSource === 'clipboard' && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-200">
+                    <Clipboard size={12} className="shrink-0" />
+                    <span>{selectedModeHint}</span>
+                  </div>
+                )}
                 {parsed && (
                   <>
                     <div className="inline-flex items-center gap-1.5 rounded-full border border-default bg-base/70 px-2.5 py-1 text-[11px] text-secondary">
@@ -411,7 +566,23 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col p-4 md:p-5 gap-4 min-h-0">
-          {isLoadingClipboard ? (
+          {importSource === 'files' && importedFiles.length === 0 && !isLoadingFiles ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
+              <Upload size={32} className="text-muted" />
+              <p className="text-sm text-secondary max-w-md">
+                {t('clipboardImport.noFilesSelected', {
+                  defaultValue: 'Choose one or more CSV/TXT files to import.',
+                })}
+              </p>
+              <button
+                type="button"
+                onClick={pickAndImportFiles}
+                className="text-xs text-blue-400 hover:underline"
+              >
+                {t('clipboardImport.chooseFiles', { defaultValue: 'Choose CSV/TXT files...' })}
+              </button>
+            </div>
+          ) : isLoadingClipboard || isLoadingFiles ? (
             <div className="flex items-center justify-center h-40 gap-3 text-secondary">
               <Loader2 size={20} className="animate-spin" />
               <span className="text-sm">{t('common.loading')}</span>
@@ -422,7 +593,7 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
               <p className="text-sm text-secondary">{error}</p>
               <button
                 type="button"
-                onClick={readClipboard}
+                onClick={importSource === 'files' ? pickAndImportFiles : readClipboard}
                 className="text-xs text-blue-400 hover:underline"
               >
                 {t('clipboardImport.retry')}
@@ -432,6 +603,73 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
             <SuccessState result={success} tableName={tableName} onClose={onClose} />
           ) : parsed ? (
             <>
+              {fileShapes && (
+                <section className="flex flex-col gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-3 md:p-4 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShapesCollapsed((v) => !v)}
+                    className="flex items-center gap-2 text-yellow-300"
+                  >
+                    {shapesCollapsed ? <ChevronRight size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span className="text-xs font-semibold">
+                      {fileShapes.size > 1
+                        ? t('clipboardImport.multipleShapesTitle', {
+                            defaultValue: 'Selected files have {{count}} different column layouts',
+                            count: fileShapes.size,
+                          })
+                        : t('clipboardImport.nameColumnsTitle', {
+                            defaultValue: 'Name the columns for these headerless files',
+                          })}
+                    </span>
+                  </button>
+                  {!shapesCollapsed && (
+                    <>
+                      <p className="text-[11px] text-yellow-200/80">
+                        {fileShapes.size > 1
+                          ? t('clipboardImport.multipleShapesHint', {
+                              defaultValue:
+                                'Merging by raw column position can be wrong when the same column number means different things across layouts. Name each layout\u2019s columns (comma-separated) to align rows by name instead.',
+                            })
+                          : t('clipboardImport.nameColumnsHint', {
+                              defaultValue:
+                                'These files have no header row, so columns are named col_1, col_2, ... by default. Type real names (comma-separated) instead of ticking "First row as header", which would otherwise use an actual data row as the column names.',
+                            })}
+                      </p>
+                      {[...fileShapes.entries()].map(([count, fileNames]) => (
+                        <div key={count} className="flex flex-col gap-1">
+                          <label className="text-[11px] text-secondary">
+                            {t('clipboardImport.shapeLabel', {
+                              defaultValue: '{{count}} columns \u2014 {{n}} file(s), e.g. "{{example}}"',
+                              count,
+                              n: fileNames.length,
+                              example: fileNames[0],
+                            })}
+                          </label>
+                          <input autoCorrect="off" autoCapitalize="off" autoComplete="off" spellCheck={false}
+                            value={shapeNamesInput[count] ?? ''}
+                            onChange={(e) =>
+                              setShapeNamesInput((prev) => ({ ...prev, [count]: e.target.value }))
+                            }
+                            placeholder={t('clipboardImport.shapeNamesPlaceholder', {
+                              defaultValue: 'col1, col2, col3, ...',
+                            })}
+                            className="w-full bg-base border border-strong rounded px-2 py-1.5 text-xs font-mono text-primary focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={applyNamedSchemas}
+                        className="self-start px-3 py-1.5 text-xs bg-yellow-900/30 hover:bg-yellow-900/50 border border-yellow-800/40 text-yellow-200 rounded transition-colors"
+                      >
+                        {t('clipboardImport.applyShapeNames', { defaultValue: 'Apply names & re-merge' })}
+                      </button>
+                    </>
+                  )}
+                </section>
+              )}
+
               <ParseSummary
                 format={parsed.format}
                 rowCount={parsed.rowCount}
@@ -638,7 +876,10 @@ export function ClipboardImportModal({ isOpen, onClose, onSuccess }: ClipboardIm
                   <Upload size={16} />
                 )}
                 {isImporting
-                  ? t('clipboardImport.importing')
+                  ? t('clipboardImport.importingCount', {
+                      count: parsed.rowCount,
+                      defaultValue: 'Importing {{count}} rows...',
+                    })
                   : t('clipboardImport.import', { count: parsed.rowCount })}
               </button>
             </div>

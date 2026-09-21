@@ -551,7 +551,11 @@
       "customOpenaiModelDesc": "输入您的 OpenAI 兼容服务提供的模型名称。",
       "customOpenaiModelHelp": "输入您的 OpenAI 兼容提供商的确切模型名称。",
       "promptResetSuccess": "提示词已重置为默认值",
-      "apiKeySaved": "API 密钥已安全保存"
+      "apiKeySaved": "API 密钥已安全保存",
+      "testConnection": "测试连接",
+      "testingConnection": "正在测试连接...",
+      "testSuccess": "连接成功！AI 服务已就绪。",
+      "testFailed": "连接测试失败"
     },
     "updates": "更新",
     "openSourceLibraries": "开源库",

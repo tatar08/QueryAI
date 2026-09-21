@@ -188,6 +188,38 @@ const READ_ONLY_KEYWORDS = new Set([
   'VALUES',
 ]);
 
+// MongoDB shell methods that only read data, never mutate it or the schema.
+const MONGO_READ_METHODS = new Set([
+  'find',
+  'findOne',
+  'aggregate',
+  'count',
+  'countDocuments',
+  'estimatedDocumentCount',
+  'distinct',
+  'explain',
+  'getIndexes',
+  'stats',
+  'listCollections',
+  'listIndexes',
+  'watch',
+]);
+
+// Matches MongoDB shell-style calls (`db.collection.method(...)` or
+// `collection.method(...)`) so a statement's leading SQL keyword isn't the
+// only way to classify it: `leadingKeyword` reads `db` as an unrecognized
+// identifier for e.g. `db.messages.find({...}).sort({...})`, which would
+// otherwise fail closed as "may write" and block a pure read.
+const MONGO_CALL_RE = /^\s*(?:db\s*\.\s*)?[a-zA-Z_$][a-zA-Z0-9_$]*\s*\.\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/;
+
+// Returns the leading method name of a MongoDB shell-style statement (the
+// entry-point call, e.g. `find` in `find({...}).sort({...})`), or null when
+// the statement doesn't look like MongoDB shell syntax.
+function mongoMethodName(statement: string): string | null {
+  const match = MONGO_CALL_RE.exec(statement);
+  return match ? match[1] : null;
+}
+
 // Resolves the effective statement keyword: unwraps EXPLAIN prefixes (on
 // Postgres, EXPLAIN ANALYZE actually EXECUTES the target statement, so an
 // EXPLAIN ANALYZE UPDATE must classify as UPDATE) and data-modifying CTEs.
@@ -204,14 +236,17 @@ function effectiveStatementKeyword(cleaned: string): string | null {
 }
 
 // True when every statement in `sql` is clearly read-only (SELECT/SHOW/
-// EXPLAIN-of-a-SELECT/...). Used by the production write warning: a `false`
-// here means "may write", so unknown statement types err on prompting.
+// EXPLAIN-of-a-SELECT/... or a read-only MongoDB shell call). Used by the
+// production write warning: a `false` here means "may write", so unknown
+// statement types err on prompting.
 export const isReadOnlyQuery = (sql: string): boolean =>
   stripCommentsAndLiterals(sql)
     .split(';')
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .every((s) => {
+      const mongoMethod = mongoMethodName(s);
+      if (mongoMethod !== null) return MONGO_READ_METHODS.has(mongoMethod);
       const keyword = effectiveStatementKeyword(s);
       return keyword !== null && READ_ONLY_KEYWORDS.has(keyword);
     });

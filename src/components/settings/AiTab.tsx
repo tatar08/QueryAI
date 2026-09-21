@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Loader2,
 } from "lucide-react";
 import clsx from "clsx";
 import { useSettings } from "../../hooks/useSettings";
@@ -23,6 +24,7 @@ import { SettingSection, SettingRow, SettingToggle } from "./SettingControls";
 import {
   OpenAIIcon,
   AnthropicIcon,
+  GeminiIcon,
   MiniMaxIcon,
   OpenRouterIcon,
   OllamaIcon,
@@ -47,6 +49,11 @@ const PROVIDERS: Array<{
     id: "anthropic",
     label: "Anthropic",
     icon: <AnthropicIcon size={18} />,
+  },
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    icon: <GeminiIcon size={18} className="text-[#4E88F5]" />,
   },
   {
     id: "minimax",
@@ -84,6 +91,7 @@ export function AiTab() {
   const [keyInput, setKeyInput] = useState("");
   const [editingKey, setEditingKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [explainPrompt, setExplainPrompt] = useState("");
   const [cellnamePrompt, setCellnamePrompt] = useState("");
@@ -126,6 +134,9 @@ export function AiTab() {
       const anthropic = await invoke<AiKeyStatus>("check_ai_key_status", {
         provider: "anthropic",
       });
+      const gemini = await invoke<AiKeyStatus>("check_ai_key_status", {
+        provider: "gemini",
+      });
       const openrouter = await invoke<AiKeyStatus>("check_ai_key_status", {
         provider: "openrouter",
       });
@@ -139,6 +150,7 @@ export function AiTab() {
       setAiKeyStatus({
         openai,
         anthropic,
+        gemini,
         openrouter,
         minimax,
         "custom-openai": customOpenai,
@@ -170,11 +182,21 @@ export function AiTab() {
       .catch(console.error);
   }, [checkKeys, loadModels]);
 
+  const cleanKey = (prov: string, raw: string) => {
+    let trimmed = raw.trim();
+    if (prov === "gemini" && trimmed.startsWith("AlzaSy")) {
+      trimmed = "AIzaSy" + trimmed.slice(6);
+    }
+    return trimmed;
+  };
+
   const handleSaveKey = async (provider: string) => {
-    if (!keyInput.trim()) return;
+    const key = cleanKey(provider, keyInput);
+    if (!key) return;
     try {
-      await invoke("set_ai_key", { provider, key: keyInput });
+      await invoke("set_ai_key", { provider, key });
       await checkKeys();
+      await loadModels(true);
       setKeyInput("");
       setEditingKey(false);
       showAlert(t("settings.ai.apiKeySaved"), {
@@ -183,6 +205,44 @@ export function AiTab() {
       });
     } catch (e) {
       showAlert(String(e), { title: t("common.error"), kind: "error" });
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!settings.aiProvider) return;
+    setTestingConnection(true);
+    try {
+      const keyToTest = cleanKey(settings.aiProvider, keyInput) || undefined;
+      const customUrl = settings.aiCustomOpenaiUrl || undefined;
+      const ollamaPort = settings.aiOllamaPort || undefined;
+
+      await invoke("test_ai_connection", {
+        req: {
+          provider: settings.aiProvider,
+          api_key: keyToTest,
+          custom_url: customUrl,
+          ollama_port: ollamaPort,
+        },
+      });
+
+      showAlert(
+        t("settings.ai.testSuccess", {
+          defaultValue: "Connection successful! AI provider is ready to use.",
+        }),
+        {
+          title: t("common.success"),
+          kind: "info",
+        },
+      );
+    } catch (e) {
+      showAlert(String(e), {
+        title: t("settings.ai.testFailed", {
+          defaultValue: "Connection Test Failed",
+        }),
+        kind: "error",
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -330,6 +390,21 @@ export function AiTab() {
                         ••••••••••••••••
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={handleTestConnection}
+                          disabled={testingConnection}
+                          className="px-3 py-1 text-xs font-medium text-secondary hover:text-primary bg-surface-secondary hover:bg-surface-tertiary border border-strong rounded-md transition-colors flex items-center gap-1.5"
+                          title={t("settings.ai.testConnection", {
+                            defaultValue: "Test Connection",
+                          })}
+                        >
+                          {testingConnection && (
+                            <Loader2 size={12} className="animate-spin" />
+                          )}
+                          {t("settings.ai.testConnection", {
+                            defaultValue: "Test Connection",
+                          })}
+                        </button>
                         {!aiKeyStatus[settings.aiProvider]?.fromEnv && (
                           <>
                             <button
@@ -408,6 +483,25 @@ export function AiTab() {
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-surface-secondary disabled:text-muted text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
                       >
                         {t("common.save")}
+                      </button>
+                      <button
+                        onClick={handleTestConnection}
+                        disabled={
+                          testingConnection ||
+                          (!keyInput.trim() &&
+                            !aiKeyStatus[settings.aiProvider]?.configured)
+                        }
+                        className="px-3 py-2 bg-surface-secondary hover:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed text-secondary hover:text-primary border border-strong rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5"
+                        title={t("settings.ai.testConnection", {
+                          defaultValue: "Test Connection",
+                        })}
+                      >
+                        {testingConnection && (
+                          <Loader2 size={14} className="animate-spin" />
+                        )}
+                        {t("settings.ai.testConnection", {
+                          defaultValue: "Test Connection",
+                        })}
                       </button>
                       {editingKey && (
                         <button
@@ -510,6 +604,21 @@ export function AiTab() {
                     className="w-24 bg-base border border-strong rounded-lg px-2 py-1.5 text-sm text-primary focus:outline-none focus:border-blue-500 transition-colors"
                   />
                   <p className="text-xs text-muted">(Default: 11434)</p>
+                  <button
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    className="ml-2 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-surface-secondary hover:bg-surface-tertiary border border-strong rounded-md transition-colors flex items-center gap-1.5"
+                    title={t("settings.ai.testConnection", {
+                      defaultValue: "Test Connection",
+                    })}
+                  >
+                    {testingConnection && (
+                      <Loader2 size={12} className="animate-spin" />
+                    )}
+                    {t("settings.ai.testConnection", {
+                      defaultValue: "Test Connection",
+                    })}
+                  </button>
                 </div>
               </div>
             )}

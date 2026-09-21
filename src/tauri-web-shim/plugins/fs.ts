@@ -29,6 +29,13 @@ export interface FsOptions {
 
 const fileStore = new Map<string, string | Uint8Array>();
 
+// Called by dialog.ts's open() so a picked browser File's real content is
+// readable afterward via readTextFile/readFile(name) — the file input only
+// exposes a File object once, at pick time, not a re-readable path.
+export function registerPickedFile(name: string, data: Uint8Array): void {
+  fileStore.set(name, data);
+}
+
 export async function readTextFile(path: string, _options?: FsOptions): Promise<string> {
   if (fileStore.has(path)) {
     const val = fileStore.get(path)!;

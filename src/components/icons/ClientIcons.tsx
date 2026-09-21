@@ -59,6 +59,19 @@ export const OllamaIcon = ({ size = 20, className }: IconProps) => (
   </svg>
 );
 
+export const GeminiIcon = ({ size = 20, className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={size}
+    height={size}
+    className={className}
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24Z" />
+  </svg>
+);
+
 export const AnthropicIcon = ({ size = 20, className }: IconProps) => (
   <svg
     viewBox="0 0 256 257"

@@ -623,7 +623,11 @@
       "customOpenaiModelDesc": "Enter the model name provided by your OpenAI-compatible service.",
       "customOpenaiModelHelp": "Enter the exact model name for your OpenAI-compatible provider.",
       "promptResetSuccess": "Prompt reset to default",
-      "apiKeySaved": "API key saved securely"
+      "apiKeySaved": "API key saved securely",
+      "testConnection": "Test Connection",
+      "testingConnection": "Testing Connection...",
+      "testSuccess": "Connection successful! AI provider is ready to use.",
+      "testFailed": "Connection Test Failed"
     },
     "updates": "Updates",
     "openSourceLibraries": "Open Source Libraries",
